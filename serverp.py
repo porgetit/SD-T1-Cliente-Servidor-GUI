@@ -1,8 +1,19 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import socket
 
-# Configuración de red
-host = '172.16.0.64'  # Dirección IPv4 del servidor
-port = 12345  # Puerto arbitrario
+# Detectar automáticamente la IP local de esta máquina
+def obtener_ip_local():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))  # No envía datos; solo determina la interfaz de salida
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+    return ip
+
+host = obtener_ip_local()
+port = 0  # 0 = el SO asigna un puerto libre automáticamente
 
 # Crear un socket TCP/IP
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -13,7 +24,13 @@ sock.bind((host, port))
 # Escuchar conexiones entrantes
 sock.listen(1)
 
-print(f"Servidor escuchando en {host}:{port}")
+# Obtener el puerto real asignado por el SO
+host_real, port_real = sock.getsockname()
+print("="*45)
+print(f"  Servidor listo. Comparte estos datos con el cliente:")
+print(f"  IP   : {host_real}")
+print(f"  Puerto: {port_real}")
+print("="*45)
 
 # Esperar una conexión
 conn, addr = sock.accept()
