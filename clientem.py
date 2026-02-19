@@ -113,26 +113,26 @@ def main():
             
             if line == 'exit':
                 break
-            elif line == 'list':
+
+            # BLOQUEO: Si hay una solicitud pendiente, solo permitir accept/deny
+            if solicitud_pendiente_de:
+                if line == 'accept':
+                    sock.sendall(f"ACCEPT_CHAT:{solicitud_pendiente_de}".encode('utf-8'))
+                    solicitud_pendiente_de = None
+                elif line == 'deny':
+                    sock.sendall(f"DENY_CHAT:{solicitud_pendiente_de}".encode('utf-8'))
+                    print(f"[INFO] Solicitud de {solicitud_pendiente_de} rechazada.")
+                    solicitud_pendiente_de = None
+                else:
+                    print(f"[!] BLOQUEO: Debes 'accept' o 'deny' la solicitud de {solicitud_pendiente_de} antes de continuar.")
+                continue
+
+            if line == 'list':
                 sock.sendall("GET_USERS".encode('utf-8'))
             elif line == 'sessions':
                 print(f"[CHATS ACTIVOS] {', '.join(sesiones_abiertas) if sesiones_abiertas else 'Ninguno'}")
                 if destino_actual:
                     print(f"[ACTUAL] Chateando con: {destino_actual}")
-            elif line == 'accept':
-                if solicitud_pendiente_de:
-                    sock.sendall(f"ACCEPT_CHAT:{solicitud_pendiente_de}".encode('utf-8'))
-                    # sesiones_abiertas y destino_actual se actualizan en el hilo de recepción
-                    solicitud_pendiente_de = None
-                else:
-                    print("[!] No tienes ninguna solicitud pendiente.")
-            elif line == 'deny':
-                if solicitud_pendiente_de:
-                    sock.sendall(f"DENY_CHAT:{solicitud_pendiente_de}".encode('utf-8'))
-                    print(f"[INFO] Solicitud de {solicitud_pendiente_de} rechazada.")
-                    solicitud_pendiente_de = None
-                else:
-                    print("[!] No tienes ninguna solicitud pendiente.")
             elif line.startswith("stop"):
                 target_to_stop = None
                 if ":" in line:
