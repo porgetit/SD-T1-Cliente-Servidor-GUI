@@ -7,11 +7,14 @@ import sys
 # Variables globales para rastrear el estado del chat
 solicitud_pendiente_de = None
 mi_nombre = None
-destino = None
+# Conjunto de usuarios con los que tenemos un chat aceptado
+sesiones_abiertas = set()
+# Destinatario al que enviamos mensajes actualmente
+destino_actual = None
 
 def receive_messages(sock):
     """Hilo para recibir mensajes del servidor de forma asíncrona."""
-    global solicitud_pendiente_de, mi_nombre
+    global solicitud_pendiente_de, mi_nombre, destino_actual
     while True:
         try:
             data = sock.recv(1024)
@@ -37,19 +40,27 @@ def receive_messages(sock):
             
             elif mensaje.startswith("CHAT_ACCEPTED:"):
                 usuario = mensaje.split(":")[1]
-                print(f"\n[SISTEMA] Chat con {usuario} ESTABLECIDO. Ya puedes enviar mensajes.")
+                sesiones_abiertas.add(usuario)
+                print(f"\n[SISTEMA] Chat con {usuario} ESTABLECIDO.")
+                if not destino_actual:
+                    destino_actual = usuario
+                    print(f"[INFO] Ahora chateando con {usuario}.")
                 print("> ", end="", flush=True)
             
             elif mensaje.startswith("CHAT_DENIED:"):
                 usuario = mensaje.split(":")[1]
                 print(f"\n[SISTEMA] {usuario} ha rechazado tu solicitud de chat.")
+                if destino_actual == usuario:
+                    destino_actual = None
                 print("> ", end="", flush=True)
             
             elif mensaje.startswith("CHAT_STOPPED:"):
                 usuario = mensaje.split(":")[1]
                 print(f"\n[SISTEMA] {usuario} ha finalizado el chat.")
-                if destino == usuario:
-                    destino = None
+                sesiones_abiertas.discard(usuario)
+                if destino_actual == usuario:
+                    destino_actual = None
+                    print("[INFO] Has vuelto al menú principal. Selecciona otro chat con 'chat:<user>'.")
                 print("> ", end="", flush=True)
 
             elif mensaje.startswith("FROM:"):
@@ -66,7 +77,7 @@ def receive_messages(sock):
     print("\n[DESCONECTADO] Conexión perdida con el servidor.")
 
 def main():
-    global solicitud_pendiente_de, destino
+    global solicitud_pendiente_de, destino_actual
     print("="*45)
     host = input("  Ingrese la IP del servidor  : ").strip()
     port = int(input("  Ingrese el puerto del servidor: ").strip())
@@ -82,17 +93,17 @@ def main():
     # Iniciar hilo de recepción
     threading.Thread(target=receive_messages, args=(sock,), daemon=True).start()
 
-    print("\n--- MENÚ DE CHAT (Confirmación Activada) ---")
+    print("\n--- MENÚ DE MULTI-CHAT ---")
     print("Comandos:")
-    print("  'list'         - Ver usuarios conectados")
-    print("  'chat:<user>'  - Solicitar chat con un usuario")
-    print("  'accept'       - Aceptar solicitud entrante")
-    print("  'deny'         - Rechazar solicitud entrante")
-    print("  'stop'         - Terminar chat actual")
-    print("  'exit'         - Salir")
+    print("  'list'          - Ver todos los usuarios en el servidor")
+    print("  'sessions'      - Ver tus chats activos")
+    print("  'chat:<user>'   - Cambiar a o solicitar chat con un usuario")
+    print("  'accept'        - Aceptar solicitud entrante")
+    print("  'deny'          - Rechazar solicitud entrante")
+    print("  'stop'          - Terminar chat actual")
+    print("  'stop:<user>'   - Terminar un chat específico")
+    print("  'exit'          - Salir")
     print("="*45)
-
-    destino = None
 
     while True:
         try:
@@ -104,10 +115,14 @@ def main():
                 break
             elif line == 'list':
                 sock.sendall("GET_USERS".encode('utf-8'))
+            elif line == 'sessions':
+                print(f"[CHATS ACTIVOS] {', '.join(sesiones_abiertas) if sesiones_abiertas else 'Ninguno'}")
+                if destino_actual:
+                    print(f"[ACTUAL] Chateando con: {destino_actual}")
             elif line == 'accept':
                 if solicitud_pendiente_de:
                     sock.sendall(f"ACCEPT_CHAT:{solicitud_pendiente_de}".encode('utf-8'))
-                    destino = solicitud_pendiente_de
+                    # sesiones_abiertas y destino_actual se actualizan en el hilo de recepción
                     solicitud_pendiente_de = None
                 else:
                     print("[!] No tienes ninguna solicitud pendiente.")
@@ -118,26 +133,42 @@ def main():
                     solicitud_pendiente_de = None
                 else:
                     print("[!] No tienes ninguna solicitud pendiente.")
-            elif line == 'stop':
-                if destino:
-                    sock.sendall(f"STOP_CHAT:{destino}".encode('utf-8'))
-                    print(f"[INFO] Chat con {destino} finalizado.")
-                    destino = None
+            elif line.startswith("stop"):
+                target_to_stop = None
+                if ":" in line:
+                    target_to_stop = line.split(":", 1)[1]
                 else:
-                    print("[!] No hay ningún chat activo.")
+                    target_to_stop = destino_actual
+                
+                if target_to_stop and target_to_stop in sesiones_abiertas:
+                    sock.sendall(f"STOP_CHAT:{target_to_stop}".encode('utf-8'))
+                    print(f"[INFO] Chat con {target_to_stop} finalizado.")
+                    sesiones_abiertas.discard(target_to_stop)
+                    if destino_actual == target_to_stop:
+                        destino_actual = None
+                elif target_to_stop:
+                    print(f"[!] No tienes un chat activo con {target_to_stop}.")
+                else:
+                    print("[!] No hay ningún chat seleccionado para detener.")
+                    
             elif line.startswith("chat:"):
-                destino_tmp = line.split(":", 1)[1]
-                if destino_tmp == mi_nombre:
+                target = line.split(":", 1)[1]
+                if target == mi_nombre:
                     print("[!] No puedes chatear contigo mismo.")
+                    continue
+                
+                if target in sesiones_abiertas:
+                    destino_actual = target
+                    print(f"[INFO] Cambiado a chat con {target}.")
                 else:
-                    sock.sendall(f"REQ_CHAT:{destino_tmp}".encode('utf-8'))
-                    print(f"[SISTEMA] Solicitud de chat enviada a {destino_tmp}. Esperando confirmación...")
-                    destino = destino_tmp # Asignamos temporalmente, el server validará el relay
+                    sock.sendall(f"REQ_CHAT:{target}".encode('utf-8'))
+                    print(f"[SISTEMA] Solicitud de chat enviada a {target}. Esperando confirmación...")
+                    destino_actual = target # Lo ponemos como actual; los mensajes fallarán hasta que acepte
             else:
-                if destino:
-                    sock.sendall(f"CHAT:{destino}:{line}".encode('utf-8'))
+                if destino_actual:
+                    sock.sendall(f"CHAT:{destino_actual}:{line}".encode('utf-8'))
                 else:
-                    print("[!] Debes seleccionar un destinatario primero con 'chat:<nombre>'")
+                    print("[!] Selecciona un chat con 'chat:<nombre>' o mira tus sesiones con 'sessions'")
         except KeyboardInterrupt:
             break
 

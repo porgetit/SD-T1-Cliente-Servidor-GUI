@@ -56,6 +56,7 @@ def handle_client(conn, addr, nombre):
                     if remitente_req in clientes:
                         sesiones_activas.add((nombre, remitente_req))
                         sesiones_activas.add((remitente_req, nombre))
+                        print(f"[CHAT ESTABLECIDO] {nombre} <-> {remitente_req}")
                         clientes[remitente_req].sendall(f"CHAT_ACCEPTED:{nombre}".encode('utf-8'))
                         conn.sendall(f"CHAT_ACCEPTED:{remitente_req}".encode('utf-8'))
                     else:
