@@ -56,6 +56,7 @@ def main():
     print("Comandos:")
     print("  'list'         - Ver usuarios conectados")
     print("  'chat:<user>'  - Iniciar chat con un usuario")
+    print("  'stop'         - Terminar chat actual")
     print("  'exit'         - Salir")
     print("="*45)
 
@@ -71,6 +72,12 @@ def main():
                 break
             elif line == 'list':
                 sock.sendall("GET_USERS".encode('utf-8'))
+            elif line == 'stop':
+                if destino:
+                    print(f"[INFO] Chat con {destino} finalizado.")
+                    destino = None
+                else:
+                    print("[!] No hay ningún chat activo.")
             elif line.startswith("chat:"):
                 destino = line.split(":", 1)[1]
                 print(f"[INFO] Ahora chateando con {destino}. Escribe tus mensajes a continuación.")
