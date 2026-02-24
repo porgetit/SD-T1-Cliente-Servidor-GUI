@@ -1,1 +1,1 @@
-from .facade import ClientFacade
+# Client package

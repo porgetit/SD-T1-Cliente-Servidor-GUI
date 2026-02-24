@@ -1,7 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+from server.facade import ServerFacade
 
-from server import ServerFacade
+def main():
+    # Iniciamos el servidor en el puerto 5000
+    ServerFacade(port=5000).run()
 
 if __name__ == "__main__":
-    ServerFacade().run()
+    main()

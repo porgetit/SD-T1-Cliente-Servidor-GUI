@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SD Chat GUI</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent-color: #38bdf8;
+            --system-msg: #94a3b8;
+            --error-msg: #ef4444;
+            --success-msg: #22c55e;
+            --modal-bg: rgba(15, 23, 42, 0.9);
+            --hint-color: #64748b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .login-card {
+            background: var(--panel-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        input,
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: white;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: var(--accent-color);
+            color: #0f172a;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        #main-ui {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            padding: 1rem;
+        }
+
+        #log {
+            flex: 1;
+            background: var(--panel-bg);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            border: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .msg {
+            margin: 4px 0;
+            border-bottom: 1px solid #33415533;
+            padding-bottom: 2px;
+        }
+
+        .system {
+            color: var(--system-msg);
+            font-style: italic;
+        }
+
+        .error {
+            color: var(--error-msg);
+        }
+
+        .info {
+            color: var(--accent-color);
+        }
+
+        .user-msg {
+            color: var(--success-msg);
+            font-weight: bold;
+        }
+
+        .own-msg {
+            color: #facc15;
+            font-weight: bold;
+            align-self: flex-start;
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Autocomplete Wrapper */
+        .input-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
+        }
+
+        .hint-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            color: var(--hint-color);
+            pointer-events: none;
+            white-space: pre;
+            font-family: inherit;
+            font-size: inherit;
+            box-sizing: border-box;
+            border: 1px solid transparent;
+            /* Match input border spacing */
+        }
+
+        .controls input {
+            background: transparent;
+            position: relative;
+            z-index: 1;
+            caret-color: white;
+            font-family: inherit;
+            font-size: inherit;
+        }
+
+        .controls button {
+            width: auto;
+            padding: 0.75rem 1.5rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Modal Styles */
+        #help-modal {
+            position: fixed;
+            inset: 0;
+            background: var(--modal-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            padding: 2rem;
+        }
+
+        .modal-content {
+            background: var(--panel-bg);
+            padding: 2rem;
+            border-radius: 1rem;
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            border: 1px solid var(--accent-color);
+        }
+
+        .help-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .help-table th,
+        .help-table td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid #334155;
+        }
+
+        .help-table th {
+            color: var(--accent-color);
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .cmd-name {
+            font-family: 'Consolas', monospace;
+            color: var(--success-msg);
+        }
+
+        .info-icon {
+            cursor: pointer;
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: transform 0.2s;
+        }
+
+        .info-icon:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="login-screen">
+        <div class="login-card">
+            <h2 style="margin-top:0">Conectar al Servidor</h2>
+            <input type="text" id="host" placeholder="Host (ej. 127.0.0.1)" value="127.0.0.1">
+            <input type="number" id="port" placeholder="Puerto" value="5000">
+            <input type="text" id="nickname" placeholder="Tu Nickname">
+            <button onclick="doLogin()">Entrar al Chat</button>
+            <p id="login-status" class="error"></p>
+        </div>
+    </div>
+
+    <div id="main-ui" class="hidden">
+        <div id="header"
+            style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h3 id="app-title" style="margin:0">Chat SD - <span id="my-name" style="color:var(--accent-color)"></span>
+            </h3>
+            <div class="info-icon" onclick="toggleHelp()">
+                <span style="font-size:0.8rem; opacity:0.7">Ayuda de comandos</span>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </div>
+        </div>
+        <div id="log"></div>
+        <div class="controls">
+            <div class="input-wrapper">
+                <div id="hint-layer" class="hint-layer"></div>
+                <input type="text" id="cmd-input" placeholder="Escribe un comando o mensaje..."
+                    onkeydown="handleKeyDown(event)" oninput="handleInput()">
+            </div>
+            <button onclick="sendCmd()">Enviar</button>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="hidden">
+        <div class="modal-content">
+            <h2 style="margin-top:0; color:var(--accent-color)">Comandos Disponibles</h2>
+            <table class="help-table">
+                <thead>
+                    <tr>
+                        <th>Comando</th>
+                        <th>Descripción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="cmd-name">list</span></td>
+                        <td>Lista todos los usuarios conectados al servidor.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">chat:user</span></td>
+                        <td>Inicia o cambia a una sesión de chat con 'user'.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">sessions</span></td>
+                        <td>Muestra tus chats activos actualmente.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">stop</span></td>
+                        <td>Finaliza el chat con el usuario actual.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">stop:user</span></td>
+                        <td>Finaliza específicamente el chat con 'user'.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">file</span></td>
+                        <td>Abre un diálogo para seleccionar archivos y enviarlos al chat actual.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">accept</span></td>
+                        <td>Acepta una solicitud de chat entrante.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">deny</span></td>
+                        <td>Rechaza una solicitud de chat entrante.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="cmd-name">exit</span></td>
+                        <td>Cierra la aplicación del cliente.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <button onclick="toggleHelp()" style="margin-top:1.5rem">Cerrar Ayuda</button>
+        </div>
+    </div>
+
+    <script>
+        let connectedUsers = [];
+        let currentSuggestion = "";
+        let suggestionMatches = [];
+        let currentMatchIndex = 0;
+
+        const baseCommands = ['list', 'sessions', 'stop', 'chat:', 'file:', 'accept', 'deny', 'exit'];
+
+        function toggleHelp() {
+            document.getElementById('help-modal').classList.toggle('hidden');
+        }
+
+        async function doLogin() {
+            const host = document.getElementById('host').value;
+            const port = parseInt(document.getElementById('port').value);
+            const nickname = document.getElementById('nickname').value;
+            const status = document.getElementById('login-status');
+
+            if (!nickname) { status.innerText = "Ingresa un nickname."; return; }
+
+            status.innerText = "Conectando...";
+            const conn = await pywebview.api.connect(host, port);
+            if (conn.status === 'success') {
+                const reg = await pywebview.api.set_name(nickname);
+                if (reg.status === 'success') {
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('main-ui').classList.remove('hidden');
+                    document.getElementById('my-name').innerText = reg.username;
+                    addEvent("[SISTEMA] Conectado exitosamente.");
+                    pywebview.api.send_command("list");
+                } else {
+                    status.innerText = reg.message;
+                }
+            } else {
+                status.innerText = conn.message;
+            }
+        }
+
+        async function sendCmd() {
+            const input = document.getElementById('cmd-input');
+            const cmd = input.value.trim();
+            if (!cmd) return;
+
+            if (cmd === 'exit') {
+                pywebview.api.close_window();
+                return;
+            }
+
+            await pywebview.api.send_command(cmd);
+            input.value = '';
+            clearSuggestion();
+        }
+
+        function handleInput() {
+            updateSuggestion();
+        }
+
+        function handleKeyDown(e) {
+            const input = document.getElementById('cmd-input');
+
+            if (e.key === 'Enter') {
+                sendCmd();
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                if (currentSuggestion) {
+                    if (suggestionMatches.length > 1) {
+                        // Iterar si hay múltiples matches
+                        currentMatchIndex = (currentMatchIndex + 1) % suggestionMatches.length;
+                        applyMatchIndex();
+                    } else {
+                        // Aceptar sugerencia única
+                        input.value = currentSuggestion;
+                        updateSuggestion();
+                    }
+                }
+            } else if (e.key === 'ArrowRight') {
+                // Aceptar sugerencia con flecha derecha si el cursor está al final
+                if (input.selectionStart === input.value.length && currentSuggestion) {
+                    input.value = currentSuggestion;
+                    updateSuggestion();
+                }
+            }
+        }
+
+        function clearSuggestion() {
+            currentSuggestion = "";
+            suggestionMatches = [];
+            currentMatchIndex = 0;
+            document.getElementById('hint-layer').innerText = "";
+        }
+
+        function updateSuggestion() {
+            const input = document.getElementById('cmd-input');
+            const val = input.value;
+            const hint = document.getElementById('hint-layer');
+
+            if (!val) {
+                clearSuggestion();
+                return;
+            }
+
+            const lowerVal = val.toLowerCase();
+            suggestionMatches = [];
+
+            // Lógica de autocompletado multi-parte
+            if (lowerVal.includes(':')) {
+                const parts = val.split(':');
+                const cmd = parts[0].toLowerCase();
+                const prefix = parts[1].toLowerCase();
+
+                if (cmd === 'chat' || cmd === 'stop') {
+                    // Autocompletar usuario tras los dos puntos
+                    suggestionMatches = connectedUsers
+                        .filter(u => u.toLowerCase().startsWith(prefix))
+                        .map(u => `${parts[0]}:${u}`);
+                }
+            } else {
+                // Autocompletar comando base
+                suggestionMatches = baseCommands
+                    .filter(c => c.startsWith(lowerVal))
+                    .map(c => c);
+            }
+
+            if (suggestionMatches.length > 0) {
+                currentMatchIndex = 0;
+                applyMatchIndex();
+            } else {
+                clearSuggestion();
+            }
+        }
+
+        function applyMatchIndex() {
+            const input = document.getElementById('cmd-input');
+            const hint = document.getElementById('hint-layer');
+            const val = input.value;
+
+            currentSuggestion = suggestionMatches[currentMatchIndex];
+
+            // Si el valor actual coincide con el inicio de la sugerencia (respetando mayúsculas/minúsculas original del input)
+            // Mostramos el resto en el hint layer
+            if (currentSuggestion.toLowerCase().startsWith(val.toLowerCase())) {
+                const remaining = currentSuggestion.slice(val.length);
+                // Usamos el texto exacto del usuario + el resto de la sugerencia
+                hint.innerText = val + remaining;
+            } else {
+                hint.innerText = "";
+            }
+        }
+
+        function addEvent(message) {
+            if (message.startsWith("USERS_UPDATE:")) {
+                const usersStr = message.replace("USERS_UPDATE:", "");
+                connectedUsers = usersStr.split(",").filter(u => u !== "");
+                return;
+            }
+
+            const log = document.getElementById('log');
+            const div = document.createElement('div');
+            div.className = 'msg';
+
+            if (message.includes('[SISTEMA]') || message.includes('[SOLICITUD]')) div.classList.add('system');
+            else if (message.includes('[ERROR]') || message.includes('[!]')) div.classList.add('error');
+            else if (message.includes('[INFO]')) div.classList.add('info');
+            else if (message.includes('] dice:')) div.classList.add('user-msg');
+            else if (message.startsWith('[YO]')) {
+                div.classList.add('own-msg');
+                div.style.alignSelf = 'flex-end';
+                div.style.textAlign = 'right';
+                div.style.background = '#33415555';
+                div.style.padding = '5px 10px';
+                div.style.borderRadius = '10px';
+            }
+
+            div.innerText = message;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>

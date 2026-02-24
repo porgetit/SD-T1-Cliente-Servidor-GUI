@@ -52,6 +52,10 @@ class MessageReceiver(threading.Thread):
             elif message.startswith("CHAT_STOPPED:"): self._on_chat_stopped(message.split(":", 1)[1])
             elif message.startswith("FROM:"): self._on_message_received(message)
             elif message.startswith("ERROR:"): self._on_error(message.split(":", 1)[1])
+            elif message.startswith("REQ_SEND_FILES_FROM:"): self._on_req_send_files_from(message.split(":", 1)[1])
+            elif message.startswith("ACCEPT_SEND_FILES_FROM:"): self._on_accept_send_files_from(message.split(":", 1)[1])
+            elif message.startswith("DENY_SEND_FILES_FROM:"): self._on_deny_send_files_from(message.split(":", 1)[1])
+            elif message.startswith("FILES_RECEIVED_FROM:"): self._on_files_received_from(message.split(":", 1)[1])
         elif msg_type == 2:
             self._on_file_received(payload)
 
@@ -67,6 +71,11 @@ class MessageReceiver(threading.Thread):
         self._buffer.add_event(f"[SISTEMA] Tu nombre es: {name}")
 
     def _on_list_users(self, users: str) -> None:
+        user_list = [u for u in users.split(",") if u]
+        self._state.connected_users = user_list
+        # Notificamos al buffer (GUI leerá la lista del estado si es necesario, 
+        # pero también podemos pasarla como un evento especial)
+        self._buffer.add_event(f"USERS_UPDATE:{users}")
         self._buffer.add_event(f"[USUARIOS CONECTADOS] {users}")
 
     def _on_req_chat_from(self, requester: str) -> None:
@@ -99,6 +108,27 @@ class MessageReceiver(threading.Thread):
     def _on_error(self, description: str) -> None:
         self._buffer.add_event(f"[ERROR] {description}")
 
+    def _on_req_send_files_from(self, payload: str) -> None:
+        sender, count = payload.split(":")
+        self._state.pending_file_request = {"sender": sender, "count": int(count)}
+        self._buffer.add_event(f"[SOLICITUD] {sender} quiere enviarte {count} archivo(s). Escribe 'accept' o 'deny'.")
+
+    def _on_accept_send_files_from(self, target: str) -> None:
+        # El receptor aceptó, ahora el emisor (nosotros) debe empezar a mandar la cola
+        self._buffer.add_event(f"[INFO] {target} ha aceptado la transferencia. Iniciando envío...")
+        # Necesitamos una forma de que ChatClient empiece a mandar. 
+        # Podemos usar un evento especial en el buffer que el ChatClient escuche? 
+        # O mejor, llamar a una función del cliente si tenemos referencia.
+        # MessageReceiver no tiene referencia al cliente, pero ChatClient puede observar el buffer.
+        self._buffer.add_event("START_FILE_TRANSFER")
+
+    def _on_deny_send_files_from(self, target: str) -> None:
+        self._buffer.add_event(f"[!] {target} ha rechazado la transferencia de archivos.")
+        self._state.file_queue = []
+
+    def _on_files_received_from(self, target: str) -> None:
+        self._buffer.add_event(f"[INFO] {target} ha recibido todos los archivos correctamente.")
+
     def _on_file_received(self, payload: bytes) -> None:
         """Maneja la recepción de archivos (Binario Genérico Tipo 2)."""
         try:
@@ -109,14 +139,35 @@ class MessageReceiver(threading.Thread):
             filename = payload[2+s_len:2+s_len+f_len].decode("utf-8")
             file_data = payload[2+s_len+f_len:]
             
-            # Ruta de descargas
-            down_path = pathlib.Path.home() / "Downloads" / self._state.name
-            down_path.mkdir(parents=True, exist_ok=True)
+            # Ruta de guardado: usar save_path si existe, sino descargas por defecto
+            if self._state.save_path:
+                down_path = pathlib.Path(self._state.save_path)
+            else:
+                down_path = pathlib.Path.home() / "Downloads" / self._state.name
             
+            down_path.mkdir(parents=True, exist_ok=True)
             dest_file = down_path / filename
+            
+            # Evitar sobreescribir si ya existe (añadir número)
+            count = 1
+            original_stem = dest_file.stem
+            while dest_file.exists():
+                dest_file = dest_file.with_name(f"{original_stem}_{count}{dest_file.suffix}")
+                count += 1
+
             with open(dest_file, "wb") as f:
                 f.write(file_data)
             
             self._buffer.add_event(f"[ARCHIVO] Recibido de {sender}: {filename} (Guardado en {dest_file})")
+            
+            # Si era parte de una solicitud pendiente, descontamos
+            if self._state.pending_file_request and self._state.pending_file_request['sender'] == sender:
+                self._state.pending_file_request['count'] -= 1
+                if self._state.pending_file_request['count'] <= 0:
+                    self._state.pending_file_request = None
+                    self._state.save_path = None
+                    self._buffer.add_event(f"[INFO] Transferencia de {sender} completada.")
+                    # Notificamos al servidor para que avise al emisor
+                    self._sock.sendall(struct.pack("!BI", 1, len(f"FILES_RECEIVED:{sender}")) + f"FILES_RECEIVED:{sender}".encode("utf-8"))
         except Exception as e:
             self._buffer.add_event(f"[ERROR ARCHIVO] {e}")

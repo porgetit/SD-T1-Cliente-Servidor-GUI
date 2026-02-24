@@ -22,5 +22,13 @@ class ProtocolHandlers:
                 server.handle_stop_chat(session, raw.split(":", 1)[1])
             elif raw.startswith("CHAT:"):
                 server.handle_chat_message(session, raw)
+            elif raw.startswith("REQ_SEND_FILES:"):
+                server.handle_req_send_files(session, raw.split(":", 1)[1])
+            elif raw.startswith("ACCEPT_SEND_FILES:"):
+                server.handle_accept_send_files(session, raw.split(":", 1)[1])
+            elif raw.startswith("DENY_SEND_FILES:"):
+                server.handle_deny_send_files(session, raw.split(":", 1)[1])
+            elif raw.startswith("FILES_RECEIVED:"):
+                server.handle_files_received(session, raw.split(":", 1)[1])
         elif msg_type == 2:
             server.handle_file_transfer(session, payload)
