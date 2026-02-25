@@ -40,4 +40,5 @@ class ClientSession:
         return msg_type, payload
 
     def close(self) -> None:
+        """Cierra la conexión con el cliente."""
         self._sock.close()

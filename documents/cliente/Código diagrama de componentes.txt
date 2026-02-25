@@ -1,0 +1,49 @@
+@startuml
+title Diagrama de Componentes - Cliente de Chat (SD-T1)
+
+skinparam componentStyle rectangle
+skinparam defaultFontSize 12
+
+package "Entrada" {
+    [client_app.py] as App
+}
+
+package "Capa de UI (Frontend)" {
+    [index.html] as HTML <<Structure>>
+    [style.css] as CSS <<Style>>
+    [script.js] as JS <<Logic>>
+}
+
+package "Capa de Fachada / Puente" {
+    [gui_app.py] as Bridge <<Bridge>>
+}
+
+package "Capa de Core" {
+    [core.py] as Core <<Controller>>
+    [state.py] as State <<Entity>>
+    [buffer.py] as EventBuffer <<Queue>>
+}
+
+package "Capa de Red" {
+    [receiver.py] as Receiver <<Listener>>
+}
+
+' Relaciones
+App ..> Bridge : lanza instancia GUI
+Bridge ..> HTML : carga interfaz
+JS ..> Bridge : invoca métodos Python
+
+Bridge --> Core : comanda acciones
+Bridge <-- EventBuffer : consume eventos para UI
+
+Core --> State : actualiza estado
+Core --> EventBuffer : registra cambios locales
+Receiver --> State : actualiza datos remotos
+Receiver --> EventBuffer : inyecta eventos remotos
+
+' Comunicación Externa
+interface "TCP Socket (IPv4)" as Network
+Core --> Network : envía tramas TLV
+Receiver -- Network : escucha tramas TLV
+
+@enduml

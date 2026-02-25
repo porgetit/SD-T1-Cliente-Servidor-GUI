@@ -18,6 +18,7 @@ class MessageReceiver(threading.Thread):
         self._buffer = buffer
 
     def recv_all(self, n: int) -> Optional[bytes]:
+        """Recibe todos los bytes de un paquete."""
         data = b""
         while len(data) < n:
             packet = self._sock.recv(n - len(data))
@@ -26,6 +27,7 @@ class MessageReceiver(threading.Thread):
         return data
 
     def run(self) -> None:
+        """Bucle principal del hilo."""
         while True:
             try:
                 header = self.recv_all(5)
@@ -41,6 +43,7 @@ class MessageReceiver(threading.Thread):
         self._buffer.add_event("[DESCONECTADO] Conexión perdida con el servidor.")
 
     def _dispatch(self, msg_type: int, payload: bytes) -> None:
+        """Distribuye los mensajes al método correspondiente."""
         if msg_type in (0, 1):
             message = payload.decode("utf-8")
             if message == "NAME_OK": self._on_name_ok()
@@ -73,8 +76,7 @@ class MessageReceiver(threading.Thread):
     def _on_list_users(self, users: str) -> None:
         user_list = [u for u in users.split(",") if u]
         self._state.connected_users = user_list
-        # Notificamos al buffer (GUI leerá la lista del estado si es necesario, 
-        # pero también podemos pasarla como un evento especial)
+        # Notificamos al buffer
         self._buffer.add_event(f"USERS_UPDATE:{users}")
         self._buffer.add_event(f"[USUARIOS CONECTADOS] {users}")
 

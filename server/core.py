@@ -4,14 +4,14 @@
 import random
 import socket
 import threading
-import struct
-from typing import Dict, Optional, Set, Tuple, Any, List
+from typing import Dict, Optional, Set, Tuple
 from .session import ClientSession
 from .buffer import RequestBuffer
 from .handlers import ProtocolHandlers
 from .logger import logger
 
 def get_local_ip() -> str:
+    """Obtiene la dirección IP local"""
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         probe.connect(("8.8.8.8", 80))
@@ -21,6 +21,8 @@ def get_local_ip() -> str:
     return ip
 
 class ChatServer:
+    """Clase principal del servidor que maneja la lógica del chat"""
+
     def __init__(self, host: Optional[str] = None, port: int = 0) -> None:
         self.host: str = host or get_local_ip()
         self.port: int = port
@@ -31,6 +33,7 @@ class ChatServer:
         self._buffer = RequestBuffer(self._dispatch_internal)
 
     def start(self) -> None:
+        """Inicia el servidor"""
         server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_sock.bind((self.host, self.port))
         server_sock.listen()
@@ -41,33 +44,40 @@ class ChatServer:
         self._accept_loop(server_sock)
 
     def _accept_loop(self, server_sock: socket.socket) -> None:
+        """Loop de aceptación de clientes"""
         while True:
-            conn, addr = server_sock.accept()
+            conn, addr = server_sock.accept() # Acepta una conexión
             temp_id = f"Temp_{random.randint(1000, 9999)}"
-            session = ClientSession(conn, addr, temp_id)
-            threading.Thread(target=self._handle_client, args=(session,), daemon=True).start()
+            session = ClientSession(conn, addr, temp_id) # Crea una sesión 
+            threading.Thread(target=self._handle_client, args=(session,), daemon=True).start() # Inicia un hilo para manejar la sesión
 
     def _handle_client(self, session: ClientSession) -> None:
+        """Maneja la sesión de un cliente
+        
+        Args:
+            session (ClientSession): Sesión del cliente
+        """
         logger.connection(session.address, "Handshake iniciado")
         try:
             while True:
                 tlv = session.recv_tlv()
                 if not tlv: break
                 msg_type, payload = tlv
-                self._buffer.add_request(session, msg_type, payload)
+                self._buffer.add_request(session, msg_type, payload) # Agrega la solicitud al buffer
         except Exception as exc:
             logger.error(f"{session.name}: {exc}")
         finally:
-            self._disconnect(session)
+            self._disconnect(session) 
 
     def _dispatch_internal(self, session: ClientSession, msg_type: int, payload: bytes):
+        """Distribuye la solicitud al manejador interno."""
         ProtocolHandlers.dispatch(self, session, msg_type, payload)
 
     def handle_file_transfer(self, session: ClientSession, payload: bytes):
         """Reenvía un archivo binario (Tipo 2) al destinatario."""
         try:
-            dst_len = payload[0]
-            target_name = payload[1:1+dst_len].decode("utf-8")
+            dst_len = payload[0] # Longitud del nombre del destinatario
+            target_name = payload[1:1+dst_len].decode("utf-8") # Nombre del destinatario
             
             with self._lock:
                 if (session.name, target_name) not in self._active_sessions:
@@ -78,7 +88,7 @@ class ChatServer:
                     return
                 
                 sender_name = session.name.encode("utf-8")
-                client_payload = bytes([len(sender_name)]) + sender_name + payload[1+dst_len:]
+                client_payload = bytes([len(sender_name)]) + sender_name + payload[1+dst_len:] 
                 
                 self._clients[target_name].send(2, client_payload)
                 logger.file_transfer(session.name, target_name, "Enrutado con éxito")
@@ -87,12 +97,13 @@ class ChatServer:
             session.send(1, f"ERROR:Fallo al procesar envío de archivo: {e}".encode("utf-8"))
 
     def handle_set_name(self, session: ClientSession, new_name: str):
+        """Establece el nombre del usuario"""
         with self._lock:
             if new_name in self._clients or "Temp_" in new_name:
                 session.send(1, b"NAME_TAKEN")
                 return
+
             
-            old_name = session.name
             session.name = new_name
             self._clients[new_name] = session
             logger.success(f"Usuario [bold cyan]{new_name}[/] ({session.address}) se ha unido.")
@@ -100,11 +111,13 @@ class ChatServer:
             logger.info(f"Conexiones activas: {len(self._clients)}")
 
     def send_user_list(self, session: ClientSession):
+        """Envía la lista de usuarios al cliente"""
         with self._lock:
             user_list = ",".join(self._clients.keys())
         session.send(1, f"LIST_USERS:{user_list}".encode("utf-8"))
 
     def handle_req_chat(self, session: ClientSession, target_name: str):
+        """Maneja la solicitud de chat"""
         with self._lock:
             if target_name not in self._clients:
                 session.send(1, f"ERROR:Usuario {target_name} no encontrado".encode("utf-8"))
@@ -112,6 +125,7 @@ class ChatServer:
                 self._clients[target_name].send(1, f"REQ_CHAT_FROM:{session.name}".encode("utf-8"))
 
     def handle_accept_chat(self, session: ClientSession, requester_name: str):
+        """Maneja la aceptación de chat"""
         with self._lock:
             self._pending_receive.discard(session.name)
             if requester_name not in self._clients:
@@ -124,12 +138,14 @@ class ChatServer:
             session.send(1, f"CHAT_ACCEPTED:{requester_name}".encode("utf-8"))
 
     def handle_deny_chat(self, session: ClientSession, requester_name: str):
+        """Maneja la denegación de chat"""
         with self._lock:
             self._pending_receive.discard(session.name)
             if requester_name in self._clients:
                 self._clients[requester_name].send(1, f"CHAT_DENIED:{session.name}".encode("utf-8"))
 
     def handle_stop_chat(self, session: ClientSession, target_name: str):
+        """Maneja la finalización de chat"""
         logger.info(f"Chat finalizado: [cyan]{session.name}[/] ha cortado con [cyan]{target_name}[/]")
         with self._lock:
             self._active_sessions.discard((session.name, target_name))
@@ -138,6 +154,7 @@ class ChatServer:
                 self._clients[target_name].send(1, f"CHAT_STOPPED:{session.name}".encode("utf-8"))
 
     def handle_req_send_files(self, session: ClientSession, payload: str):
+        """Maneja la solicitud de envío de archivos"""
         try:
             target_name, count = payload.split(":")
             with self._lock:
@@ -150,6 +167,7 @@ class ChatServer:
             session.send(1, "ERROR:Formato REQ_SEND_FILES inválido".encode("utf-8"))
 
     def handle_accept_send_files(self, session: ClientSession, sender_name: str):
+        """Maneja la aceptación de envío de archivos"""
         with self._lock:
             if sender_name in self._clients:
                 self._clients[sender_name].send(1, f"ACCEPT_SEND_FILES_FROM:{session.name}".encode("utf-8"))
@@ -158,20 +176,23 @@ class ChatServer:
                 session.send(1, f"ERROR:Usuario {sender_name} desconectado".encode("utf-8"))
 
     def handle_deny_send_files(self, session: ClientSession, sender_name: str):
+        """Maneja la denegación de envío de archivos"""
         with self._lock:
             if sender_name in self._clients:
                 self._clients[sender_name].send(1, f"DENY_SEND_FILES_FROM:{session.name}".encode("utf-8"))
                 logger.file_transfer(session.name, sender_name, "Transferencia RECHAZADA")
 
     def handle_files_received(self, session: ClientSession, sender_name: str):
+        """Maneja la recepción de archivos"""
         with self._lock:
             if sender_name in self._clients:
                 self._clients[sender_name].send(1, f"FILES_RECEIVED_FROM:{session.name}".encode("utf-8"))
                 logger.file_transfer(session.name, sender_name, "Lote RECIBIDO y confirmado")
 
     def handle_chat_message(self, session: ClientSession, raw: str):
+        """Maneja el envío de mensajes"""
         try:
-            _, target_name, text = raw.split(":", 2)
+            _, target_name, text = raw.split(":", 2) # Separamos el mensaje en target_name y text
         except ValueError:
             session.send(1, "ERROR:Formato de mensaje inválido".encode("utf-8"))
             return
@@ -187,6 +208,7 @@ class ChatServer:
             self._clients[target_name].send(0, f"FROM:{session.name}:{text}".encode("utf-8"))
 
     def _disconnect(self, session: ClientSession):
+        """Maneja la desconexión de un cliente"""
         with self._lock:
             if session.name in self._clients:
                 self._clients.pop(session.name, None)
@@ -196,7 +218,3 @@ class ChatServer:
                 self._active_sessions.discard(s)
         logger.connection(session.address, f"{session.name} se ha desconectado.")
         session.close()
-
-    def _print_banner(self, host: str, port: int):
-        # Mantenemos por compatibilidad interna si se llama, pero ahora usamos logger.banner
-        logger.banner(host, port)

@@ -1,0 +1,47 @@
+@startuml
+title Diagrama de Componentes - Servidor de Chat (SD-T1)
+
+package "Entrada" {
+    [server_app.py] as App
+}
+
+package "Capa de Fachada" {
+    [facade.py] as Facade <<Facade>>
+}
+
+package "Capa de Core" {
+    [core.py] as ChatServer <<Component>>
+    [session.py] as ClientSession <<Entity>>
+    [buffer.py] as RequestBuffer <<Queue>>
+}
+
+package "Capa de Lógica" {
+    [handlers.py] as ProtocolHandlers <<Logic>>
+}
+
+package "Soporte" {
+    [logger.py] as Logger <<Utility>>
+}
+
+' Relaciones
+App ..> Facade : lanza
+Facade ..> ChatServer : inicializa
+
+ChatServer "1" --* ClientSession : gestiona
+ChatServer --> RequestBuffer : encola peticiones
+RequestBuffer --> ChatServer : procesa vía callback
+ChatServer <--> ProtocolHandlers : despacha comandos\ninvoca acciones
+
+ProtocolHandlers .[hidden].> ChatServer
+ProtocolHandlers ..> ClientSession : envía respuestas TLV
+
+' Logging
+ChatServer ..> Logger : registra eventos
+ProtocolHandlers ..> Logger : registra detalles
+RequestBuffer ..> Logger : registra flujo
+
+' Comunicación Externa
+interface "TCP Socket (IPv4)" as Network
+ClientSession -- Network : Protocolo TLV
+
+@enduml

@@ -18,12 +18,14 @@ class ChatClient:
         self._receiver: Optional[MessageReceiver] = None
 
     def connect(self, host: str, port: int) -> None:
+        """Conecta al cliente al servidor."""
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.connect((host, port))
         self._receiver = MessageReceiver(self._sock, self._state, self._buffer)
         self._receiver.start()
 
     def disconnect(self) -> None:
+        """Desconecta al cliente del servidor."""
         if self._sock:
             self._sock.close()
         self._buffer.stop()
@@ -42,42 +44,37 @@ class ChatClient:
         line = line.strip()
         if not line: return
 
-        if self._state.pending_requests:
+        if self._state.pending_requests: # Si hay solicitudes pendientes
             requester = self._state.pending_requests[0]
             if line == "accept": self._cmd_accept()
             elif line == "deny": self._cmd_deny()
             else: self._buffer.add_event(f"[!] BLOQUEO: Debes 'accept' o 'deny' la solicitud de chat de {requester}.")
             return
 
-        if self._state.pending_file_request:
+        if self._state.pending_file_request: # Si hay solicitudes de archivos pendientes
             if line == "accept": self._cmd_accept()
             elif line == "deny": self._cmd_deny()
             else: self._buffer.add_event(f"[!] BLOQUEO: Debes 'accept' o 'deny' la transferencia de archivos.")
             return
 
-        if line == "list": self._cmd_list()
-        elif line == "sessions": self._cmd_sessions()
-        elif line == "file":
-            # Este comando ahora se activará desde la GUI para abrir el diálogo
-            self._buffer.add_event("FILE_DIALOG_REQUEST")
-        elif line.startswith("file:"):
-            # Mantenemos soporte legado por si acaso, pero encolamos
-            self.send_files([line.split(":", 1)[1]])
-        elif line.startswith("stop"):
+        if line == "list": self._cmd_list() # Si se recibe el comando list
+        elif line == "sessions": self._cmd_sessions() # Si se recibe el comando sessions
+        elif line == "file": self._buffer.add_event("FILE_DIALOG_REQUEST") # Si se recibe el comando file
+        elif line.startswith("stop"): # Si se recibe el comando stop
             target = line.split(":", 1)[1] if ":" in line else self._state.current_target
             self._cmd_stop(target)
         elif line.startswith("chat:"): self._cmd_chat(line.split(":", 1)[1])
         else: self._cmd_send(line)
 
-    def _cmd_list(self) -> None: self._send(1, b"GET_USERS")
+    def _cmd_list(self) -> None: self._send(1, b"GET_USERS") # Si se recibe el comando list
 
-    def _cmd_sessions(self) -> None:
+    def _cmd_sessions(self) -> None: # Si se recibe el comando sessions
         sessions_str = ", ".join(self._state.open_sessions) if self._state.open_sessions else "Ninguno"
         self._buffer.add_event(f"[CHATS ACTIVOS] {sessions_str}")
         if self._state.current_target: 
             self._buffer.add_event(f"[ACTUAL] Chateando con: {self._state.current_target}")
 
-    def _cmd_accept(self) -> None:
+    def _cmd_accept(self) -> None: # Si se recibe el comando accept
         if self._state.pending_requests:
             requester = self._state.pending_requests.pop(0)
             self._send(1, f"ACCEPT_CHAT:{requester}".encode("utf-8"))
@@ -101,7 +98,7 @@ class ChatClient:
         else:
             self._buffer.add_event("[!] No hay nada que rechazar.")
 
-    def _cmd_stop(self, target: Optional[str]) -> None:
+    def _cmd_stop(self, target: Optional[str]) -> None: # Si se recibe el comando stop
         if target and target in self._state.open_sessions:
             self._send(1, f"STOP_CHAT:{target}".encode("utf-8"))
             self._state.open_sessions.discard(target)
@@ -110,7 +107,7 @@ class ChatClient:
         else:
             self._buffer.add_event(f"[!] No tienes un chat activo con {target}")
 
-    def _cmd_chat(self, target: str) -> None:
+    def _cmd_chat(self, target: str) -> None: # Si se recibe el comando chat
         if target == self._state.name:
             self._buffer.add_event("[!] No puedes chatear contigo mismo.")
             return
@@ -174,6 +171,7 @@ class ChatClient:
             self._send_next_file()
 
     def _cmd_send(self, text: str) -> None:
+        """Envía un mensaje de texto."""
         if self._state.current_target: 
             self._send(0, f"CHAT:{self._state.current_target}:{text}".encode("utf-8"))
             self._buffer.add_event(f"[YO] {text}")
@@ -181,6 +179,7 @@ class ChatClient:
             self._buffer.add_event("[!] Selecciona un chat primero.")
 
     def _send(self, msg_type: int, data: bytes) -> None:
+        """Envía un mensaje al servidor."""
         if self._sock:
             try:
                 header = struct.pack("!BI", msg_type, len(data))

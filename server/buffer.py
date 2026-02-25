@@ -16,9 +16,11 @@ class RequestBuffer:
         self._worker.start()
 
     def add_request(self, session: Any, msg_type: int, payload: bytes):
+        """Agrega una solicitud al buffer."""
         self._queue.put((session, msg_type, payload))
 
     def _process_loop(self):
+        """Bucle de procesamiento de peticiones."""
         while not self._stop_event.is_set():
             try:
                 session, msg_type, payload = self._queue.get(timeout=1.0)
@@ -28,5 +30,6 @@ class RequestBuffer:
                 continue
 
     def stop(self):
+        """Detiene el buffer."""
         self._stop_event.set()
         self._worker.join()

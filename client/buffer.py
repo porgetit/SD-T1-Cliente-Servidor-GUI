@@ -14,6 +14,7 @@ class EventBuffer:
         self._worker.start()
 
     def add_event(self, message: str):
+        """Agrega un evento al buffer."""
         self._queue.put(message)
 
     def _process_loop(self):
@@ -27,6 +28,7 @@ class EventBuffer:
                 continue
 
     def stop(self):
+        """Detiene el buffer."""
         self._stop_event.set()
         if self._worker.is_alive():
             self._worker.join(timeout=2.0)

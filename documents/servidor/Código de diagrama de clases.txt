@@ -1,0 +1,80 @@
+@startuml
+title Diagrama de Clases - Servidor de Chat (SD-T1)
+skinparam classAttributeIconSize 0
+
+class ServerFacade {
+    - _server: ChatServer
+    + __init__(host: str, port: int)
+    + run(): void
+}
+
+class ChatServer {
+    + host: str
+    + port: int
+    - _clients: Dict[str, ClientSession]
+    - _active_sessions: Set[Tuple[str, str]]
+    - _lock: threading.Lock
+    - _buffer: RequestBuffer
+    + __init__(host: str, port: int)
+    + start(): void
+    - _accept_loop(server_sock: socket): void
+    - _handle_client(session: ClientSession): void
+    - _dispatch_internal(session, type, payload): void
+    + handle_set_name(session, name): void
+    + send_user_list(session): void
+    + handle_req_chat(session, target): void
+    + handle_accept_chat(session, requester): void
+    + handle_deny_chat(session, requester): void
+    + handle_stop_chat(session, target): void
+    + handle_chat_message(session, raw): void
+    + handle_req_send_files(session, payload): void
+    + handle_file_transfer(session, payload): void
+    - _disconnect(session): void
+}
+
+class ClientSession {
+    - _sock: socket.socket
+    + address: Tuple
+    + name: str
+    + __init__(sock, addr, temp_id)
+    + send(msg_type: int, data: bytes): void
+    + recv_tlv(): Tuple[int, bytes]
+    - _recv_all(n: int): bytes
+    + close(): void
+}
+
+class RequestBuffer {
+    - _queue: queue.Queue
+    - _dispatch_callback: Callable
+    - _stop_event: threading.Event
+    - _worker: threading.Thread
+    + __init__(dispatch_callback)
+    + add_request(session, type, payload): void
+    - _process_loop(): void
+    + stop(): void
+}
+
+class ProtocolHandlers <<static>> {
+    + {static} dispatch(server, session, type, payload): void
+}
+
+class RichLogger {
+    - console: Console
+    + banner(host, port): void
+    + info(message): void
+    + success(message): void
+    + error(message): void
+    + connection(addr, status): void
+    + file_transfer(sender, receiver, info): void
+}
+
+' Relaciones
+ServerFacade *-- ChatServer : composición
+ChatServer "1" *-- "n" ClientSession : mantiene
+ChatServer o-- RequestBuffer : usa para concurrencia
+ChatServer ..> ProtocolHandlers : delega parseo
+ProtocolHandlers ..> ChatServer : invoca handlers
+ProtocolHandlers ..> ClientSession : usa para responder
+ChatServer ..> RichLogger : reporta eventos
+
+@enduml

@@ -1,0 +1,80 @@
+@startuml
+title Diagrama de Clases - Cliente de Chat (SD-T1)
+skinparam classAttributeIconSize 0
+
+class Bridge {
+    - _window: webview.Window
+    - _client: ChatClient
+    + __init__()
+    + set_window(window: webview.Window): void
+    - _handle_server_event(message: str): void
+    + connect(host: str, port: int): Dict
+    + set_name(name: str): Dict
+    + send_command(command: str): Dict
+    + get_my_name(): str
+    + get_connected_users(): List
+    + close_window(): void
+    + select_files(): List
+    + select_folder(): str
+}
+
+class ChatClient {
+    - _sock: socket.socket
+    - _state: ChatState
+    - _buffer: EventBuffer
+    - _receiver: MessageReceiver
+    + __init__(event_callback: Callable)
+    + connect(host: str, port: int): void
+    + disconnect(): void
+    + set_name(name: str): bool
+    + process_command(line: str): void
+    + send_files(paths: List[str]): void
+    - _send_next_file(): void
+    - _send(msg_type: int, data: bytes): void
+}
+
+class MessageReceiver {
+    - _sock: socket.socket
+    - _state: ChatState
+    - _buffer: EventBuffer
+    + __init__(sock, state, buffer)
+    + run(): void
+    + recv_all(n: int): bytes
+    - _dispatch(type, payload): void
+    - _on_name_ok(): void
+    - _on_list_users(users): void
+    - _on_file_received(payload): void
+}
+
+class ChatState {
+    + name: str
+    + connected_users: List[str]
+    + open_sessions: Set[str]
+    + current_target: str
+    + file_queue: List[str]
+    + name_confirmed: threading.Event
+    + save_path: str
+    + __init__()
+}
+
+class EventBuffer {
+    - _queue: queue.Queue
+    - _callback: Callable
+    - _stop_event: threading.Event
+    + __init__(callback)
+    + add_event(message: str): void
+    - _process_loop(): void
+    + stop(): void
+}
+
+' Relaciones
+Bridge *-- ChatClient : composición
+ChatClient *-- ChatState : mantiene estado
+ChatClient *-- EventBuffer : gestiona eventos UI
+ChatClient "1" *-- "1" MessageReceiver : orquestra hilo de red
+
+MessageReceiver ..> ChatState : actualiza
+MessageReceiver ..> EventBuffer : notifica a UI
+MessageReceiver ..> ChatClient : (a través de buffer/state)
+
+@enduml
