@@ -1,89 +1,117 @@
-# Sistema de Multi-Chat Modular (Protocolo TLV)
+# SD-T1-Cliente-Servidor (GUI Edition) 🚀
 
-Este proyecto implementa un sistema de mensajería asíncrono y distribuido utilizando la arquitectura **Cliente-Servidor**, sobre protocolos **IPv4** y **TCP/IP**. El sistema ha sido diseñado bajo principios sólidos de ingeniería de software para garantizar la escalabilidad, mantenibilidad y robustez en la transferencia de datos binarios.
+> Hecho por **Kevin Esguerra Cardona**, apoyado por **Gemini 3 Flash** usando **Antigravity**.
 
-## 🚀 Características Principales
-
-- **Gestión de Nicknames**: Registro único de usuarios mediante un handshake de confirmación.
-- **Multiprocesamiento Ordenado**: Uso de colas de peticiones para garantizar que los mensajes se procesen en el orden exacto de llegada.
-- **Doble Buffer de Sincronización**: Sistema que evita el solapamiento de mensajes entrantes con la entrada de texto del usuario en la consola.
-- **Transferencia Universal**: Soporte para envío de cualquier tipo de archivo (binario o texto) sin restricciones de extensión.
-- **Descargas Automáticas**: Organización dinámica de archivos recibidos en la carpeta `Downloads` del sistema.
-
-## 🛠️ Arquitectura y Diseño
-
-El sistema se encuentra dentro de la carpeta `thread/` y está dividido en dos grandes paquetes independientes:
-
-### 1. Servidor (`thread/server/`)
-- **`facade.py`**: Punto de entrada simplificado (Patrón Fachada).
-- **`core.py`**: Orquestación principal, manejo de conexiones y enrutado de archivos genéricos.
-- **`session.py`**: Abstracción de bajo nivel para la comunicación por socket.
-- **`buffer.py`**: Implementa el `RequestBuffer` para la serialización de tareas concurrentes.
-- **`handlers.py`**: Despacho de la lógica de negocio según el protocolo.
-
-### 2. Cliente (`thread/client/`)
-- **`facade.py`**: Fachada para el inicio del cliente.
-- **`core.py`**: Manejo de entrada de usuario y preparación de payloads binarios.
-- **`receiver.py`**: Hilo de fondo dedicado a la escucha, parseo de red y reconstrucción de archivos.
-- **`buffer.py`**: `EventBuffer` que gestiona la salida limpia por consola.
-- **`state.py`**: Repositorio central de información.
-
-## 📡 Protocolo TLV Simplificado (3 Tipos)
-
-Para la comunicación, utilizamos un patrón de **empaquetamiento binario framing** optimizado. Cada mensaje transmitido sigue este patrón:
-
-| Campo | Tamaño | Formato (`struct`) | Descripción |
-| :--- | :--- | :--- | :--- |
-| **Tipo** | 1 Byte | `B` (Unsigned Char) | `0`: Texto, `1`: Comando, `2`: Binario Genérico |
-| **Longitud** | 4 Bytes | `I` (Unsigned Int) | Tamaño exacto del payload total en bytes |
-
-### Estructura del Payload Binario (Tipo 2)
-Para permitir el envío de **cualquier archivo**, el payload de Tipo 2 utiliza un encapsulamiento interno (Doble TLV) que viaja de la siguiente forma:
-
-1. `[LongitudNombre(1B)]`: Longitud del nombre del archivo.
-2. `[NombreArchivo(NB)]`: Nombre original con extensión (ej: `foto.png`, `main.py`).
-3. `[ContenidoBinario(MB)]`: El flujo de bytes puro del archivo.
-
-> [!IMPORTANT]
-> Se utiliza el prefijo `!` en `struct.pack("!BI", ...)` para forzar el **Network Byte Order (Big-Endian)**, garantizando que máquinas con diferentes arquitecturas (Windows/Linux) se entiendan perfectamente.
-
-## 💡 Justificación Técnica
-
-### ¿Por qué Modularidad y SRP?
-Originalmente, el sistema era un archivo monolítico. Aplicamos el **Principio de Responsabilidad Única (SRP)** para separar la lógica de red de la lógica de interfaz (UI). Esto permite:
-- **Testabilidad**: Probar el envío de archivos sin necesidad de lanzar la UI.
-- **Mantenibilidad**: Corregir errores en el buffer sin afectar el protocolo.
-
-### ¿Por qué TLV?
-La red es un flujo continuo de bytes. Sin un patrón de empaquetamiento, es imposible distinguir dónde termina un mensaje y empieza otro (problema de concatenación de sockets). El patrón **TLV** permite al receptor saber exactamente cuántos bytes debe esperar antes de procesar un mensaje completo. 
-
-Nuestra implementación de **Doble TLV para archivos** permite que cualquier formato (ej: código fuente, ejecutables, comprimidos) viaje con su propio "DNI" (nombre y extensión), logrando un sistema 100% agnóstico al tipo de dato.
-
-## 📋 Requisitos y Ejecución
-
-- **Python 3.10+** (Sin dependencias externas).
-
-### Servidor
-```powershell
-python thread/server_app.py
-```
-
-### Cliente
-```powershell
-python thread/client_app.py
-```
-
-### Comandos del Cliente
-- `list`: Muestra usuarios conectados.
-- `chat:<nickname>`: Inicia un chat con un usuario.
-- `file:<ruta_absoluta>`: Envía un archivo al chat actual.
-- `stop`: Finaliza el chat activo.
-- `exit`: Cierra la sesión.
-
-## ⚠️ Limitaciones
-- **Alcance**: Diseñado para redes locales o VPNs punto a punto.
-- **Persistencia**: Los nicknames y chats se pierden al reiniciar el servidor (no usa base de datos).
-- **Seguridad**: Los datos se transmiten sin cifrado (TCP plano).
+Sistema de mensajería asíncrono y distribuido basado en el modelo **Cliente-Servidor**, diseñado para la transferencia eficiente de mensajes de texto y archivos binarios mediante un protocolo **TLV (Type-Length-Value)** personalizado sobre **TCP/IP**.
 
 ---
-*Desarrollado como solución robusta para el ejercicio de sistemas distribuidos.*
+
+## 🏗️ Arquitectura del Sistema
+
+El proyecto está estructurado de forma modular siguiendo principios de **Programación Orientada a Objetos (OOP)** y **Separación de Responsabilidades (SoC)**.
+
+### 🌐 El Servidor (`server/`)
+Actúa como el orquestador central, gestionando la concurrencia y el enrutamiento de datos.
+
+- **`core.py` (ChatServer)**: Gestiona el ciclo de vida de las conexiones y el estado global.
+- **`handlers.py` (ProtocolHandlers)**: Despacha la lógica de negocio basada en el tipo de mensaje recibido.
+- **`buffer.py` (RequestBuffer)**: Implementa una cola de procesamiento serializado para evitar condiciones de carrera en el estado del servidor.
+- **`session.py` (ClientSession)**: Abstracción de bajo nivel sobre los sockets para envío/recepción atómica de frames TLV.
+
+### 💻 El Cliente (`client/`)
+Combina una lógica de red robusta con una interfaz visual moderna.
+
+- **`gui_app.py` (Bridge)**: Utiliza `pywebview` para renderizar un frontend HTML/JS y conectarlo con la lógica Python.
+- **`core.py` (ChatClient)**: Orquesta las solicitudes salientes y la gestión de estados locales (sesiones activas, colas de archivos).
+- **`receiver.py` (MessageReceiver)**: Hilo dedicado que escucha constantemente el socket para procesar eventos entrantes de forma no bloqueante.
+- **`buffer.py` (EventBuffer)**: Sincroniza los eventos provenientes del hilo receptor con la interfaz de usuario.
+
+---
+
+## 📡 Protocolo de Comunicación (TLV)
+
+Para garantizar que los datos se entreguen íntegros y sin problemas de fragmentación (típicos de TCP), implementamos un sistema de **Framing Binario**.
+
+### Estructura del Frame
+Cada mensaje en la red viaja con el siguiente encabezado de 5 bytes:
+
+| Tamaño | Campo | Formato (`struct`) | Descripción |
+| :--- | :--- | :--- | :--- |
+| **1 Byte** | `Type` | `B` (unsigned char) | Clasifica el propósito del mensaje. |
+| **4 Bytes** | `Length` | `I` (unsigned int) | Tamaño del `Payload` en bytes. |
+
+### Tipos de Mensajes
+1.  **Tipo 0 (Texto)**: Mensajes de chat convencionales (UTF-8).
+2.  **Tipo 1 (Comando)**: Señalización del sistema (handshakes, listas, solicitudes de chat).
+3.  **Tipo 2 (Binario Genérico)**: Envoltura para archivos con metadatos internos.
+
+---
+
+## 📂 Transferencia de Archivos (Doble TLV)
+
+El sistema soporta el envío de **múltiples archivos** de cualquier extensión. La seguridad se garantiza mediante un **Handshake de tres vías**:
+
+1.  **Solicitud**: El Emisor envía un comando `REQ_SEND_FILES` con el conteo de archivos.
+2.  **Autorización**: El Receptor recibe una notificación y elige una carpeta de destino; si acepta, envía `ACCEPT_SEND_FILES`.
+3.  **Transmisión**: El Emisor comienza a enviar frames de **Tipo 2** secuencialmente.
+
+### Anatomía del Payload Tipo 2
+Para que el servidor sepa a quién enrutar y el receptor sepa cómo guardar el archivo, el payload interno sigue esta estructura:
+`[DST_LEN][DST_NAME][FILENAME_LEN][FILENAME][DATA]`
+
+> [!NOTE]
+> El sistema incluye lógica automática de **evasión de colisiones**: si un archivo ya existe en la carpeta de destino, se renombra automáticamente (ej: `foto_1.png`).
+
+---
+
+## ✨ Características de la GUI
+
+La interfaz ha sido diseñada para ser funcional y estéticamente agradable:
+- **Tema Oscuro**: Estética "Modern Dark" con acentos en azul cian.
+- **Autocompletado**: Soporte para `TAB` en comandos (`chat:`, `stop:`, `file:`) y nombres de usuarios conectados.
+- **Ayuda Integrada**: Modal interactivo accesible desde la interfaz.
+- **Handshake de Nickname**: Registro ordenado con validación de nombres duplicados.
+
+---
+
+## 🛠️ Ejecución y Pruebas
+
+### Requisitos
+- Python 3.10 o superior.
+- Librería `pywebview` (`pip install pywebview`).
+
+### Paso 1: Iniciar el Servidor
+```powershell
+python server_app.py
+```
+El servidor detectará automáticamente tu IP local y escuchará en el puerto 5000.
+
+### Paso 2: Iniciar el Cliente
+```powershell
+python client_app.py
+```
+*Nota: El cliente se lanza en un proceso independiente desvinculado de la terminal.*
+
+---
+
+## 🧪 ¿Cómo probar el sistema?
+
+Para realizar una prueba completa de integración, sigue estos pasos:
+
+1.  **Lanzar el Servidor**: Abre una terminal y ejecuta `python server_app.py`.
+2.  **Lanzar dos Clientes**: Abre una segunda y tercera terminal para ejecutar `python client_app.py` dos veces.
+3.  **Conexión**:
+    - En el Cliente A: Ingresa el nombre `Alfa` y presiona "Entrar al Chat".
+    - En el Cliente B: Ingresa el nombre `Beta` y presiona "Entrar al Chat".
+4.  **Descubrimiento**: Escribe `list` en cualquier entrada de comando para ver al otro usuario.
+5.  **Iniciar Chat**: En el Cliente A, escribe `chat:Beta`. El Cliente B recibirá una solicitud que deberá `accept`.
+6.  **Enviar Mensaje**: Una vez establecido el chat, escribe cualquier texto para chatear.
+7.  **Enviar Archivo**: 
+    - Escribe `file`. Se abrirá un selector de archivos nativo.
+    - Selecciona uno o varios archivos.
+    - El Cliente B recibirá una solicitud. Al escribir `accept`, se le pedirá elegir una carpeta donde guardar los archivos.
+    - Observa cómo se trasfieren los bytes y se guardan con el nombre original en el destino.
+8.  **Finalizar**: Escribe `exit` para cerrar la aplicación.
+
+---
+*Desarrollado para la asignatura de Sistemas Distribuidos.*
