@@ -100,11 +100,11 @@ class ChatServer:
     def handle_set_name(self, session: ClientSession, new_name: str):
         """Establece el nombre del usuario"""
         with self._lock:
+            if session.closed:  # ← Guardia contra el race condition
+                return
             if new_name in self._clients or "Temp_" in new_name:
                 session.send(1, b"NAME_TAKEN")
                 return
-
-            
             session.name = new_name
             self._clients[new_name] = session
             logger.success(f"Usuario [bold cyan]{new_name}[/] ({session.address}) se ha unido.")
@@ -210,9 +210,10 @@ class ChatServer:
 
     def _disconnect(self, session: ClientSession):
         """Maneja la desconexión de un cliente"""
+        session.closed = True  # ← Marcar PRIMERO, antes del lock
         with self._lock:
-            if session.name in self._clients:
-                self._clients.pop(session.name, None)
+            if session.name in self._clients and self._clients[session.name] is session:
+                self._clients.pop(session.name)
             self._pending_receive.discard(session.name)
             stale = [s for s in self._active_sessions if session.name in s]
             for s in stale:

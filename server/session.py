@@ -12,6 +12,7 @@ class ClientSession:
         self._sock = sock
         self.address = address
         self.name = name
+        self.closed = False
 
     def send(self, msg_type: int, data: bytes) -> None:
         """Envía un mensaje usando el formato TLV (!BI)."""
@@ -42,3 +43,4 @@ class ClientSession:
     def close(self) -> None:
         """Cierra la conexión con el cliente."""
         self._sock.close()
+        self.closed = True
