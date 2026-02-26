@@ -56,7 +56,7 @@ SYSTEM_DEPS_LINUX = [
     "python3-gi",
     "python3-gi-cairo",
     "gir1.2-gtk-3.0",
-    "gir1.2-webkit2-4.0",
+    "gir1.2-webkit2-4.1", # Actualizado de 4.0 a 4.1 para Mint/Ubuntu modernos
     "libgtk-3-0",
     "libwebkit2gtk-4.0-37",
 ]
@@ -186,7 +186,16 @@ def _import_name(pkg: str) -> str:
 
 def check_python_deps() -> list[str]:
     """Retorna lista de paquetes Python que faltan en el venv."""
-    return [p for p in PYTHON_DEPS if not _is_python_pkg_installed(p)]
+    missing = []
+    for pkg in PYTHON_DEPS:
+        # Especial para Linux: pywebview requiere extras [gtk]
+        check_name = pkg
+        if pkg == "pywebview" and get_os() == "linux":
+            check_name = "pywebview[gtk]"
+        
+        if not _is_python_pkg_installed(pkg):
+            missing.append(check_name)
+    return missing
 
 def install_python_deps(missing: list[str]) -> bool:
     """Instala paquetes Python faltantes en el venv. Retorna True si tuvo éxito."""
