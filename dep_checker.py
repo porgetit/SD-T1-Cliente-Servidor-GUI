@@ -28,6 +28,10 @@ from pathlib import Path
 # Dependencias Python requeridas (se cargarán de requisitos.txt si existe)
 PYTHON_DEPS = ["pywebview", "rich"] 
 
+# Directorio raíz del proyecto (donde viven client_app.py y server_app.py)
+PROJECT_ROOT = Path(__file__).parent.resolve()
+VENV_DIR = PROJECT_ROOT / "venv"
+
 # Archivo de requerimientos
 REQUIREMENTS_FILE = PROJECT_ROOT / "requirements.txt"
 
@@ -56,10 +60,6 @@ SYSTEM_DEPS_LINUX = [
     "libgtk-3-0",
     "libwebkit2gtk-4.0-37",
 ]
-
-# Directorio raíz del proyecto (donde viven client_app.py y server_app.py)
-PROJECT_ROOT = Path(__file__).parent.resolve()
-VENV_DIR = PROJECT_ROOT / "venv"
 
 # Flag que se añade al re-lanzar dentro del venv para evitar bucles
 _VENV_FLAG = "--running-in-venv"
@@ -213,7 +213,7 @@ def relaunch_in_venv(extra_args: list[str] = None) -> None:
     Añade _VENV_FLAG para evitar un bucle infinito.
     Esta función NO retorna: reemplaza el proceso actual.
     """
-    script = sys.argv[0]
+    script = os.path.abspath(sys.argv[0])
     args = sys.argv[1:]
     if extra_args:
         args += extra_args
@@ -300,9 +300,12 @@ def bootstrap(app_label: str = "sistema") -> None:
     # -- Re-lanzar si:
     #    a) Se instaló algo nuevo en esta ejecución, o
     #    b) El venv era nuevo (primera vez), o
-    #    c) El proceso actual NO está corriendo desde el Python del venv
-    #       (caso de ejecuciones posteriores donde todo ya estaba listo)
-    running_from_venv = Path(sys.executable).resolve() == venv_python().resolve()
+    #    c) El proceso actual NO está corriendo desde el venv
+    
+    # Verificamos si el ejecutable actual está dentro de la carpeta del venv
+    current_exe = Path(sys.executable).resolve()
+    target_venv_exe = venv_python().resolve()
+    running_from_venv = target_venv_exe.parent in current_exe.parents
 
     if needs_relaunch or venv_is_new or not running_from_venv:
         relaunch_in_venv()

@@ -69,10 +69,6 @@ class MessageReceiver(threading.Thread):
         self._state.name_error = "El nombre ya está en uso."
         self._state.name_confirmed.set()
 
-    def _on_assign_name(self, name: str) -> None:
-        self._state.name = name
-        self._buffer.add_event(f"[SISTEMA] Tu nombre es: {name}")
-
     def _on_list_users(self, users: str) -> None:
         user_list = [u for u in users.split(",") if u]
         self._state.connected_users = user_list

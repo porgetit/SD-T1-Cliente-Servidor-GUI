@@ -96,15 +96,20 @@ class Bridge:
 
 def start_gui(host="127.0.0.1", port=5000):
     """Inicia la GUI."""
-    bridge = Bridge()
-    html_path = pathlib.Path(__file__).parent / "gui" / "index.html"
-    
-    window = webview.create_window(
-        'SD Chat GUI', 
-        str(html_path), 
-        js_api=bridge,
-        width=1000,
-        height=700
-    )
-    bridge.set_window(window)
-    webview.start(debug=False)
+    try:
+        bridge = Bridge()
+        html_path = (pathlib.Path(__file__).parent / "gui" / "index.html").resolve()
+        
+        window = webview.create_window(
+            'SD Chat GUI', 
+            str(html_path), 
+            js_api=bridge,
+            width=1000,
+            height=700
+        )
+        bridge.set_window(window)
+        webview.start(debug=False)
+    except Exception as e:
+        with open("client_error.log", "a", encoding="utf-8") as f:
+            f.write(f"Error starting GUI: {e}\n")
+        raise e
