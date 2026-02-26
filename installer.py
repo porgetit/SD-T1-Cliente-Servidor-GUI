@@ -94,28 +94,34 @@ def bootstrap(app_type: str):
     Punto de entrada para cliente o servidor.
     Determina si ya estamos en el venv, de lo contrario lo prepara.
     """
-    # Si ya tenemos el flag de venv, simplemente lo removemos y volvemos a la app
+    # 1. Si ya tenemos el flag de venv, simplemente lo removemos y procedemos a instalar/ejecutar
     if VENV_FLAG in sys.argv:
         sys.argv.remove(VENV_FLAG)
+        os_type = _get_os()
+        info(f"Ejecutando dentro del VENV para [{app_type.upper()}]")
+        
+        # Instalamos las dependencias AQUÍ, ya dentro del venv
+        if not _install_deps(app_type, os_type):
+            sys.exit(1)
         return
 
     os_type = _get_os()
-    info(f"Iniciando flujo de instalación para [{app_type.upper()}] en [{os_type.upper()}]")
+    info(f"Iniciando flujo de preparación para [{app_type.upper()}] en [{os_type.upper()}]")
     
-    # 1. Asegurar VENV
+    # 2. Asegurar que el VENV existe
     if not _ensure_venv():
         sys.exit(1)
         
-    # 2. Instalar dependencias correspondientes
-    if not _install_deps(app_type, os_type):
-        sys.exit(1)
-        
-    # 3. Verificar si el proceso actual ya es el del venv
+    # 3. Verificar si el proceso actual es el del venv
     current_exe = Path(sys.executable).resolve()
     v_python = _get_venv_python().resolve()
     
-    # Si el proceso no es el del venv (el padre en el Scripts/bin), relanzamos
+    # Si el proceso no es el del venv, relanzamos de inmediato
     if v_python.parent not in current_exe.parents:
+        info("No se detectó ejecución en VENV. Relanzando...")
         _relaunch_in_venv()
     else:
-        info("Entorno virtual verificado e independiente.")
+        # En caso de que se ejecute manualmente desde el venv sin el flag
+        info("Ejecución detectada en VENV (manual). Verificando dependencias...")
+        if not _install_deps(app_type, os_type):
+            sys.exit(1)
