@@ -24,7 +24,8 @@ class ChatServer:
     """Clase principal del servidor que maneja la lógica del chat"""
 
     def __init__(self, host: Optional[str] = None, port: int = 0) -> None:
-        self.host: str = host or get_local_ip()
+        self.bind_host: str = host or "0.0.0.0"
+        self.network_ip: str = get_local_ip()
         self.port: int = port
         self._clients: Dict[str, ClientSession] = {}
         self._active_sessions: Set[Tuple[str, str]] = set()
@@ -35,12 +36,12 @@ class ChatServer:
     def start(self) -> None:
         """Inicia el servidor"""
         server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_sock.bind((self.host, self.port))
+        server_sock.bind((self.bind_host, self.port))
         server_sock.listen()
 
         real_host, real_port = server_sock.getsockname()
         self.port = real_port
-        logger.banner(real_host, real_port)
+        logger.banner(real_host, real_port, self.network_ip)
         self._accept_loop(server_sock)
 
     def _accept_loop(self, server_sock: socket.socket) -> None:

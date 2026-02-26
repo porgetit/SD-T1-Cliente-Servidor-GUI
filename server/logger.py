@@ -7,11 +7,12 @@ class RichLogger:
     def __init__(self):
         self.console = Console()
 
-    def banner(self, host: str, port: int):
+    def banner(self, bind_ip: str, port: int, network_ip: str):
         """Imprime el banner del servidor."""
         banner_text = Text()
         banner_text.append("Servidor de Chat Modular (TLV)\n", style="bold cyan")
-        banner_text.append(f"IP: {host} | Puerto: {port}", style="green")
+        banner_text.append(f"Escuchando en: {bind_ip}:{port}\n", style="green")
+        banner_text.append(f"IP para clientes remotos: {network_ip}", style="bold yellow")
         
         self.console.print(Panel(banner_text, expand=False, border_style="blue"))
 
