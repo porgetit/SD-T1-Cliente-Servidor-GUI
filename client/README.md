@@ -33,20 +33,20 @@ El cliente es **mayoritariamente agnóstico al SO**, pero incluye optimizaciones
 - **Renderizado**: `pywebview` utiliza el motor de renderizado nativo del SO (Edge/WebView2 en Windows, WebKit en macOS/Linux), asegurando que la UI se vea bien en todas partes sin empaquetar un navegador pesado.
 
 ### Optimizaciones de Infraestructura (Windows):
-- **Aislamiento de Consola**: En Windows, `client_app.py` intenta usar `pythonw.exe` y banderas de creación de proceso (`DETACHED_PROCESS`) para lanzar el cliente sin abrir una ventana de terminal adicional, comportándose como una aplicación de escritorio real.
+- **Aislamiento de Consola**: En Windows, `cliente.py` utiliza `pythonw.exe` y banderas de creación de proceso (`DETACHED_PROCESS`) para lanzar el cliente sin abrir una ventana de terminal adicional, comportándose como una aplicación de escritorio real.
 - **Rutas de Archivo**: La gestión de transferencias de archivos utiliza `pathlib` para asegurar la compatibilidad con los separadores de ruta (`\` vs `/`).
 
 ---
 
 ## 🛠️ Requisitos e Infraestructura
 - **Python 3.10+**
-- **Dependencias**:
+- **Dependencias**: Gestionadas automáticamente mediante `requirements.txt`.
   - `pywebview`: Para la ventana gráfica.
-  - `python-clr` (opcional en Windows): Para una mejor integración con .NET/WebView2.
-- **Red**: El cliente espera una conexión TCP abierta hacia el puerto del servidor (por defecto 5000), sin restricciones de firewall local para el tráfico saliente.
+  - `rich`: Para el formateo de logs.
+- **Red**: El cliente espera una conexión TCP abierta hacia el puerto del servidor (por defecto 5000).
 
 ## 🚀 Flujo de Trabajo
-1.  **Lanzamiento**: `client_app.py` inicia la GUI desvinculada.
+1.  **Lanzamiento**: `cliente.py` verifica dependencias e inicia la GUI desvinculada.
 2.  **Handshake**: El usuario ingresa host, puerto y nick; el Bridge inicia la conexión vía `core.py`.
 3.  **Escucha**: Se activa `receiver.py` para procesar el flujo TLV entrante.
 4.  **Interacción**: Los comandos escritos en la UI son enviados por el Bridge al Core, y los eventos recibidos se inyectan en el log de la GUI mediante el buffer.

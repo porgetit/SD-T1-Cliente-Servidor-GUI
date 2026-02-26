@@ -40,7 +40,7 @@ Una característica fundamental de este servidor es que es **totalmente agnósti
 
 ## 🚀 Flujo de Operación
 
-1.  **Arranque**: `ServerFacade` instancia `ChatServer`, vincula el socket a un puerto (por defecto dinámico o 5000) y comienza el loop de aceptación.
+1.  **Arranque**: `servidor.py` verifica dependencias, instancia `ServerFacade`, vincula el socket a un puerto (por defecto 5000) y comienza el loop de aceptación.
 2.  **Aceptación**: Cada cliente nuevo genera una `ClientSession` y un hilo dedicado para la recepción (`_handle_client`).
 3.  **Buffering**: Las ráfagas de mensajes entrantes se depositan en el `RequestBuffer`.
 4.  **Procesamiento**: El hilo `worker` del buffer extrae las peticiones y llama a `ProtocolHandlers.dispatch`.
@@ -48,4 +48,4 @@ Una característica fundamental de este servidor es que es **totalmente agnósti
 
 ## 🛠️ Requisitos
 - **Python 3.10+**
-- **Librerías**: `rich` (para el logging visual).
+- **Librerías**: Gestionadas automáticamente mediante `requirements.txt` (usa `rich` para el logging visual).
