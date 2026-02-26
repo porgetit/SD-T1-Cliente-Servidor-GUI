@@ -2,8 +2,10 @@ import sys
 import subprocess
 import os
 from client.gui_app import start_gui
+from dep_checker import bootstrap
 
 def main():
+    bootstrap("cliente")
     # Si se pasa un flag interno, ejecutamos la GUI normalmente
     if "--run-internal" in sys.argv:
         start_gui()
