@@ -29,9 +29,9 @@ def main():
                 f.write(f"[{os.getpid()}] CRASH EN GUI: {e}\n")
             raise e
     else:
-        # PROCESO PADRE: Verifica dependencias y lanza el hijo
-        from dep_checker import bootstrap
-        bootstrap("cliente")
+        # 1. Verificación de dependencias (Instalador modular)
+        from installer import bootstrap
+        bootstrap("client")
         
         python_exe = sys.executable
         is_debug = "--debug" in sys.argv

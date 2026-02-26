@@ -8,9 +8,9 @@ Punto de entrada principal para el servidor del chat.
 Gestiona la verificación de dependencias e inicia el socket server.
 """
 
-# 1. Verificación de dependencias (Antes de importar módulos del proyecto)
-from dep_checker import bootstrap
-bootstrap("servidor")
+# 1. Verificación de dependencias (Instalador modular)
+from installer import bootstrap
+bootstrap("server")
 
 # 2. Importación de la lógica del servidor
 from server.facade import ServerFacade
