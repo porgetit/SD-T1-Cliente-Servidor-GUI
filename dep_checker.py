@@ -52,13 +52,12 @@ def _load_requirements():
         error(f"Error al leer {REQUIREMENTS_FILE.name}: {e}")
 
 # Dependencias del sistema para Linux (apt)
+# Basado en la documentación oficial de pywebview para Debian/Ubuntu/Mint
 SYSTEM_DEPS_LINUX = [
     "python3-gi",
     "python3-gi-cairo",
     "gir1.2-gtk-3.0",
-    "gir1.2-webkit2-4.1", # Actualizado de 4.0 a 4.1 para Mint/Ubuntu modernos
-    "libgtk-3-0",
-    "libwebkit2gtk-4.0-37",
+    "gir1.2-webkit2-4.1", # Versión moderna (Mint 21/22, Ubuntu 22/24)
 ]
 
 # Flag que se añade al re-lanzar dentro del venv para evitar bucles
@@ -117,7 +116,26 @@ def _is_system_pkg_installed(pkg: str) -> bool:
 
 def check_system_deps_linux() -> list[str]:
     """Retorna lista de paquetes del sistema que faltan."""
-    missing = [p for p in SYSTEM_DEPS_LINUX if not _is_system_pkg_installed(p)]
+    missing = []
+    
+    # Paquetes fijos requeridos
+    required_fixed = [
+        "python3-gi",
+        "python3-gi-cairo",
+        "gir1.2-gtk-3.0",
+    ]
+    
+    for pkg in required_fixed:
+        if not _is_system_pkg_installed(pkg):
+            missing.append(pkg)
+            
+    # Lógica de WebKit2: Buscamos 4.1 o 4.0. Si no está ninguno, pedimos el 4.1
+    if not _is_system_pkg_installed("gir1.2-webkit2-4.1") and \
+       not _is_system_pkg_installed("gir1.2-webkit2-4.0"):
+        # Verificamos cuál existe en el repo antes de pedirlo
+        # Por defecto pedimos 4.1 ya que es el estándar moderno
+        missing.append("gir1.2-webkit2-4.1")
+        
     return missing
 
 def install_system_deps_linux(missing: list[str]) -> bool:
