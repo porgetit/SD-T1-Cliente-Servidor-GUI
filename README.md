@@ -1,82 +1,113 @@
 # SD-T1-Cliente-Servidor (GUI Edition) 🚀
 
-> Hecho por **Kevin Esguerra Cardona**, apoyado por **Gemini 3 Flash** usando **Antigravity**.
+> Hecho por **Kevin Esguerra Cardona**, apoyado por **Gemini 2.5 Flash** usando **Antigravity**.
 
-Sistema de mensajería asíncrono y distribuido basado en el modelo **Cliente-Servidor**, diseñado para la transferencia eficiente de mensajes de texto y archivos binarios mediante un protocolo **TLV (Type-Length-Value)** personalizado sobre **TCP/IP**.
+Sistema de mensajería asíncrono y distribuido basado en el modelo **Cliente-Servidor**, con soporte de chat en tiempo real y transferencia de archivos binarios mediante un protocolo **TLV (Type-Length-Value)** personalizado sobre **TCP/IP**.
 
 ---
 
 ## 🏗️ Arquitectura del Sistema
 
-El proyecto está estructurado de forma modular siguiendo principios de **Programación Orientada a Objetos (OOP)** y **Separación de Responsabilidades (SoC)**.
+El proyecto está estructurado de forma modular siguiendo principios de **Orientación a Objetos (OOP)**, **Separación de Responsabilidades (SoC)** y **Patrón Observer**, que desacopla completamente la lógica de negocio del sistema de salida.
+
+---
 
 ### 🌐 El Servidor (`server/`)
-Actúa como el orquestador central, gestionando la concurrencia y el enrutamiento de datos.
 
-- **`servidor.py` [NUEVO]**: Punto de entrada principal. Verifica dependencias e inicia la fachada del servidor.
-- **`core.py` (ChatServer)**: Gestiona el ciclo de vida de las conexiones y el estado global.
-- **`handlers.py` (ProtocolHandlers)**: Despacha la lógica de negocio basada en el tipo de mensaje recibido.
-- **`buffer.py` (RequestBuffer)**: Implementa una cola de procesamiento serializado.
-- **`session.py` (ClientSession)**: Abstracción sobre los sockets para envío/recepción de frames TLV.
+El servidor actúa como orquestador central. Hereda de `Observable` y emite eventos semánticos tipados que cualquier observer puede consumir sin modificar la lógica de red.
+
+| Archivo | Rol |
+|---|---|
+| `core.py` | **ChatServer** — gestión de conexiones, estado y enrutamiento. Hereda de `Observable`. |
+| `events.py` | Catálogo de **dataclasses de eventos** (`ServerStarted`, `ClientJoined`, `FileTransferRouted`, …). Datos puros, sin dependencias de presentación. |
+| `observable.py` | Mixin **Observable** thread-safe con `emit()`, `subscribe()` y `unsubscribe()`. |
+| `logger.py` | **ServerObserver** — observer concreto que traduce eventos a consola Rich y `server.log`. |
+| `handlers.py` | Despacho del protocolo de comandos según tipo TLV. |
+| `buffer.py` | Cola FIFO serializada para procesar peticiones en orden. |
+| `session.py` | Abstracción del socket TCP para tramas TLV. |
+| `facade.py` | **Único punto de cableado** — conecta `ChatServer` ↔ `ServerObserver`. |
+
+> Para añadir una GUI al servidor o exponerlo como API, basta con implementar un nuevo observer y suscribirlo en `facade.py` sin tocar nada más.
+
+---
 
 ### 💻 El Cliente (`client/`)
-Combina una lógica de red robusta con una interfaz visual moderna.
 
-- **`cliente.py` [NUEVO]**: Punto de entrada principal. Gestiona dependencias y lanza la GUI desvinculada de la terminal.
-- **`gui_app.py` (Bridge)**: Utiliza `pywebview` para renderizar un frontend HTML/JS.
-- **`core.py` (ChatClient)**: Orquesta las solicitudes salientes y la gestión de estados locales.
-- **`receiver.py` (MessageReceiver)**: Hilo dedicado que escucha el socket para procesar eventos entrantes.
-- **`buffer.py` (EventBuffer)**: Sincroniza los eventos con la interfaz de usuario.
+Combina lógica de red robusta con una interfaz visual moderna renderizada con pywebview.
 
----
-
-## 🛠️ Verificación de Dependencias (`dep_checker.py`)
-
-El sistema incluye un script inteligente de pre-arranque (`dep_checker.py`) que:
-1.  Detecta el SO (Linux/Windows).
-2.  Carga los requisitos desde `requirements.txt`.
-3.  Crea y gestiona un entorno virtual (`venv`) automáticamente.
-4.  Instala dependencias faltantes sin intervención manual.
+| Archivo | Rol |
+|---|---|
+| `gui_app.py` | **Bridge** — puente entre JS del frontend y Python; gestiona la ventana pywebview. |
+| `core.py` | **ChatClient** — lógica de alto nivel: conexión, comandos, envío de archivos. |
+| `receiver.py` | Hilo daemon que escucha el socket y desempaqueta tramas TLV entrantes. |
+| `state.py` | Estado centralizado de la sesión (nombre, chats, archivos, solicitudes). |
+| `buffer.py` | Cola asíncrona de eventos hacia la GUI. Resiliente: errores del callback no matan el hilo. |
+| `gui/` | `index.html` + `style.css` + `script.js` — interfaz completamente desacoplada del Python. |
 
 ---
 
-## 🚀 Ejecución y Pruebas
+### 📁 Archivos raíz
 
-### Requisitos
-- Python 3.10 o superior.
+| Archivo | Rol |
+|---|---|
+| `servidor.py` | Punto de entrada del servidor. Instancia `ServerFacade(port=5000)`. |
+| `cliente.py` | Punto de entrada del cliente. Lanza la GUI como proceso desvinculado (`pythonw.exe`). Errores capturados en `client_stderr.log`. |
+| `test_logger.py` | Script de prueba de conexión TCP básica (handshake TLV). |
+| `test_client_logic.py` | Script de prueba completa del ciclo connect → set_name → NAME_OK sin GUI. |
 
-### Paso 1: Iniciar el Servidor
-Abra una terminal en la raíz del proyecto y ejecute:
+---
+
+## 🛰️ Protocolo TLV
+
+Protocolo personalizado sobre TCP: `[Type (1B)] [Length (4B BE)] [Value (NB)]`
+
+| Tipo | Uso |
+|---|---|
+| `0` | Mensaje de texto entre usuarios |
+| `1` | Comando de control (SET_NAME, REQ_CHAT, ACCEPT_CHAT, etc.) |
+| `2` | Binario genérico (archivos con metadatos de origen y nombre embebidos) |
+
+---
+
+## 🚀 Ejecución
+
+**Requisitos:** Python 3.10+
+
 ```powershell
+# Terminal 1 — Servidor
 python servidor.py
-```
-El servidor validará el entorno e iniciará en el puerto 5000.
 
-### Paso 2: Iniciar el Cliente
-En otra terminal, ejecute:
-```powershell
+# Terminal 2 — Cliente (se abre en ventana separada)
 python cliente.py
 ```
-*Nota: En Windows, el cliente se lanza como un proceso desvinculado de la consola.*
 
 ---
 
-## 🧪 ¿Cómo probar el sistema?
+## 🧪 Cómo probar el sistema
 
-Para realizar una prueba completa de integración, sigue estos pasos:
+1. **Lanzar el servidor**: `python servidor.py` — muestra el banner con la IP de red.
+2. **Lanzar dos clientes**: `python cliente.py` dos veces (dos ventanas GUI).
+3. **Conectar**: En cada ventana, ingresar host (`127.0.0.1` o la IP del banner), puerto `5000` y un nickname distinto.
+4. **Descubrir usuarios**: Escribir `list` en la entrada de comandos.
+5. **Iniciar chat**: Cliente A escribe `chat:NombreDeB`. Cliente B responde `accept`.
+6. **Mensajear**: Cualquier texto en la entrada se envía al chat activo.
+7. **Enviar archivo**: Escribir `file` → selector nativo → receptor escribe `accept` → elige carpeta.
+8. **Salir**: Escribir `exit`.
 
-1.  **Lanzar el Servidor**: Ejecute `python servidor.py`.
-2.  **Lanzar dos Clientes**: Ejecute `python cliente.py` dos veces.
-3.  **Conexión**:
-    - En el Cliente A: Ingrese un nickname y presione "Entrar al Chat".
-    - En el Cliente B: Ingrese un nickname y presione "Entrar al Chat".
-4.  **Descubrimiento**: Escribe `list` en cualquier entrada de comando para ver al otro usuario.
-5.  **Iniciar Chat**: En el Cliente A, escribe `chat:NombreDeBeta`. El Cliente B deberá `accept`.
-6.  **Enviar Mensaje**: Una vez establecido el chat, escribe cualquier texto para chatear.
-7.  **Enviar Archivo**: 
-    - Escribe `file`. Se abrirá un selector de archivos nativo.
-    - El receptor deberá `accept` y elegir una carpeta de destino.
-8.  **Finalizar**: Escribe `exit` para cerrar la aplicación.
+Para probar sin GUI:
+```powershell
+python test_client_logic.py 127.0.0.1 5000 MiNick
+```
 
 ---
+
+## 🔍 Diagnóstico
+
+| Log | Contenido |
+|---|---|
+| `server.log` | Registro persistente de todos los eventos del servidor en texto plano. |
+| `client_stderr.log` | Errores internos del proceso GUI silencioso (`pythonw.exe`). |
+
+---
+
 *Desarrollado para la asignatura de Sistemas Distribuidos.*

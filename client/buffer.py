@@ -22,7 +22,11 @@ class EventBuffer:
             try:
                 message = self._queue.get(timeout=1.0)
                 if self._callback:
-                    self._callback(message)
+                    try:
+                        self._callback(message)
+                    except Exception as e:
+                        import sys
+                        print(f"[EventBuffer ERROR] callback falló: {e}", file=sys.stderr, flush=True)
                 self._queue.task_done()
             except queue.Empty:
                 continue

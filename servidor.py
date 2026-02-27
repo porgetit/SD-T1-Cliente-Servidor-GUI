@@ -5,19 +5,16 @@
 servidor.py
 -----------
 Punto de entrada principal para el servidor del chat.
-Gestiona la verificación de dependencias e inicia el socket server.
+Inicia el socket server.
 """
 
-# 1. Verificación de dependencias (Instalador modular)
-from installer import bootstrap
-bootstrap("server")
-
-# 2. Importación de la lógica del servidor
+import os
 from server.facade import ServerFacade
 
 def main():
-    # Iniciamos el servidor en el puerto 5000 por defecto
-    ServerFacade(port=5000).run()
+    # Buscamos el puerto en la variable de entorno, si no existe usamos 5000
+    port = int(os.environ.get("PORT", 5000))
+    ServerFacade(port=port).run()
 
 if __name__ == "__main__":
     main()

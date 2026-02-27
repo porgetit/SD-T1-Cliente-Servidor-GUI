@@ -1,51 +1,75 @@
 # Componente Servidor - Chat Modular
 
-Este directorio contiene el núcleo del sistema de mensajería, diseñado bajo una arquitectura modular, multihilo y agnóstica a la infraestructura.
+Este directorio contiene el núcleo del sistema de mensajería, diseñado bajo una arquitectura modular, multihilo y agnóstica a la infraestructura. El servidor expone sus eventos internos a través de un sistema de observadores intercambiables, separando completamente la lógica de negocio del sistema de salida.
 
 ## 🏗️ Arquitectura de Software
 
-El servidor se ha estructurado siguiendo principios de separación de responsabilidades para facilitar su escalabilidad y mantenimiento:
+El servidor implementa el **patrón Observer** para desacoplar la lógica de red de cualquier sistema de presentación (consola, GUI, API REST).
 
-### Componentes Clave:
-- **`facade.py` (Fachada)**: Proporciona una interfaz simplificada (`ServerFacade`) para iniciar y controlar el servidor, ocultando la complejidad interna del sistema.
-- **`core.py` (Núcleo)**: Contiene la clase `ChatServer`, que gestiona el ciclo de vida de las conexiones, el estado global de los usuarios y el despacho de mensajes.
-- **`session.py` (Gestión de Sesiones)**: La clase `ClientSession` encapsula la comunicación directa con un socket, manejando el envío y recepción de datos en formato TLV.
-- **`buffer.py` (Buffer de Peticiones)**: Implementa una cola de prioridad FIFO que asegura que todas las peticiones entrantes sean procesadas de forma secuencial y ordenada por un hilo trabajador dedicado, evitando condiciones de carrera en el estado global.
-- **`handlers.py` (Manejadores de Protocolo)**: Centraliza la lógica de interpretación de comandos (JSON/Texto) y el enrutamiento de datos binarios.
-- **`logger.py` (Logging Enriquecido)**: Utiliza la librería `rich` para proporcionar una consola administrativa visual y detallada de eventos en tiempo real.
+### Capa de Negocio:
+- **`core.py` (ChatServer)**: Gestiona el ciclo de vida de conexiones, el estado global de usuarios y el enrutamiento de mensajes. Hereda de `Observable` y emite **eventos semánticos tipados** ante cada acción interna — sin ningún conocimiento del sistema de salida.
+- **`handlers.py` (ProtocolHandlers)**: Centraliza la interpretación del protocolo de comandos y el enrutamiento de datos binarios.
+- **`buffer.py` (RequestBuffer)**: Cola FIFO serializada para procesar peticiones de red en orden. Notifica al sistema de eventos en caso de error.
+- **`session.py` (ClientSession)**: Abstracción sobre el socket TCP. Maneja el envío y recepción de tramas TLV.
+
+### Capa de Eventos (nueva):
+- **`events.py`**: Catálogo de dataclasses inmutables que representan cada evento del servidor (`ServerStarted`, `ClientJoined`, `FileTransferRouted`, `BufferError`, etc.). Son datos puros, sin dependencias de presentación.
+- **`observable.py`**: Mixin `Observable` thread-safe que dota a cualquier clase de la capacidad de emitir eventos (`emit`) y registrar observers (`subscribe`/`unsubscribe`).
+
+### Capa de Presentación:
+- **`logger.py` (ServerObserver)**: Observer concreto que traduce los eventos semánticos del servidor a dos salidas paralelas: consola Rich formateada y archivo de log de texto plano (`server.log`). Internamente usa dos workers asíncronos en colas separadas para no bloquear el servidor. Para cambiar la presentación (GUI, API, etc.), basta con implementar un nuevo observer y suscribirlo.
+
+### Punto de Cableado:
+- **`facade.py` (ServerFacade)**: Único lugar donde se instancia el servidor y sus observers y se conectan entre sí. Expone una interfaz mínima (`run()`) para el punto de entrada.
 
 ---
 
 ## 🛰️ Protocolo de Comunicación (TLV)
 
-El servidor utiliza un protocolo de red personalizado basado en **TLV (Type-Length-Value)** sobre TCP. Este diseño garantiza que el servidor pueda manejar datos heterogéneos (texto, comandos, binarios) de forma eficiente.
+El servidor utiliza un protocolo de red personalizado basado en **TLV (Type-Length-Value)** sobre TCP.
 
 ### Estructura del Paquete:
-- **Type (1 byte)**: Identifica el tipo de mensaje (0: Texto, 1: Comando, 2: Binario/Archivo).
+- **Type (1 byte)**: Identifica el tipo de mensaje (`0`: Texto, `1`: Comando, `2`: Binario/Archivo).
 - **Length (4 bytes)**: Entero sin signo (Big-Endian) que indica el tamaño del payload.
-- **Value (N bytes)**: El contenido real del mensaje.
+- **Value (N bytes)**: El contenido del mensaje.
+
+---
+
+## 🔌 Cómo añadir un nuevo observer
+
+Para integrar una GUI, API REST u otro sistema de salida sin tocar el servidor:
+
+```python
+# En facade.py (única modificación necesaria)
+from .mi_gui_observer import MiGuiObserver
+
+self._server.subscribe(MiGuiObserver())
+self._server.subscribe(self._observer)   # el logger original sigue funcionando
+```
+
+Cada observer recibe todos los eventos e implementa `__call__(self, event)`.
 
 ---
 
 ## 🏢 Agnóstico a la Infraestructura
 
-Una característica fundamental de este servidor es que es **totalmente agnóstico a la infraestructura** donde se despliega. Esto se logra mediante:
-
-1.  **Detección Dinámica de IP**: Utiliza un "probe" de socket para identificar la interfaz de red local activa, permitiendo que el servidor se autoconfigure en diferentes entornos (LAN, VPN, localhost) sin intervención manual.
-2.  **Abstracción de Sockets**: La lógica de negocio no depende de configuraciones específicas del SO, sino que interactúa con la capa de abstracción de Python `socket`.
-3.  **Independencia de Persistencia**: Actualmente, el servidor mantiene el estado en memoria RAM, lo que elimina dependencias de bases de datos externas y facilita despliegues rápidos en contenedores o máquinas virtuales ligeras.
-4.  **Concurrencia Nativa**: El uso de `threading` permite un escalado vertical eficiente sin requerir orquestadores complejos de procesos externos para una carga de usuarios moderada.
+1. **Detección dinámica de IP**: Probe de socket para identificar la interfaz activa sin configuración manual.
+2. **Estado en memoria**: Sin dependencias de bases de datos externas.
+3. **Concurrencia nativa**: `threading` para escalado vertical eficiente.
 
 ---
 
 ## 🚀 Flujo de Operación
 
-1.  **Arranque**: `servidor.py` verifica dependencias, instancia `ServerFacade`, vincula el socket a un puerto (por defecto 5000) y comienza el loop de aceptación.
-2.  **Aceptación**: Cada cliente nuevo genera una `ClientSession` y un hilo dedicado para la recepción (`_handle_client`).
-3.  **Buffering**: Las ráfagas de mensajes entrantes se depositan en el `RequestBuffer`.
-4.  **Procesamiento**: El hilo `worker` del buffer extrae las peticiones y llama a `ProtocolHandlers.dispatch`.
-5.  **Enrutamiento**: Si el mensaje es una transferencia de archivos (Tipo 2), el servidor busca la sesión del destinatario y reenvía el payload binario con metadatos de origen inyectados.
+1. **Arranque**: `servidor.py` instancia `ServerFacade` que conecta `ChatServer` ↔ `ServerObserver`.
+2. **Inicio**: El servidor emite `ServerStarted` → el observer registra el banner.
+3. **Aceptación**: Cada cliente genera una `ClientSession` y un hilo dedicado; el servidor emite `ClientHandshakeStarted`.
+4. **Buffering**: Los mensajes entrantes van al `RequestBuffer` serializado.
+5. **Procesamiento**: `ProtocolHandlers.dispatch` resuelve el comando y el servidor emite el evento de resultado (`ClientJoined`, `ChatEstablished`, `FileTransferRouted`, etc.).
+6. **Salida**: El `ServerObserver` recibe el evento y lo distribuye a sus workers de consola y archivo.
+
+---
 
 ## 🛠️ Requisitos
 - **Python 3.10+**
-- **Librerías**: Gestionadas automáticamente mediante `requirements.txt` (usa `rich` para el logging visual).
+- **Librerías**: `rich` (logging visual). Gestionadas mediante `requirements.txt`.
