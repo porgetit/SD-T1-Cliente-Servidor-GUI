@@ -1,6 +1,6 @@
 # SD-T1-Cliente-Servidor (GUI Edition) 🚀
 
-> Hecho por **Kevin Esguerra Cardona**, apoyado por **Gemini 2.5 Flash** usando **Antigravity**.
+> Hecho por **Kevin Esguerra Cardona**, **David Julian Torres Osorio** y **Estaban Guapacha Jiminez** apoyado por **Gemini 2.5 Flash** usando **Antigravity**.
 
 Sistema de mensajería asíncrono y distribuido basado en el modelo **Cliente-Servidor**, con soporte de chat en tiempo real y transferencia de archivos binarios mediante un protocolo **TLV (Type-Length-Value)** personalizado sobre **TCP/IP**.
 
